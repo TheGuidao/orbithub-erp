@@ -36,7 +36,6 @@ export default async function OficinaPage(props: { searchParams: Promise<{ error
       data: { vehicleId, type, performedKm, nextRevisionKm, description, cost }
     });
 
-    // Atualiza o KM atual do veículo para o KM da manutenção se for maior
     const v = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
     if (v && performedKm > v.currentKm) {
       await prisma.vehicle.update({ where: { id: vehicleId }, data: { currentKm: performedKm } });
@@ -54,7 +53,6 @@ export default async function OficinaPage(props: { searchParams: Promise<{ error
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* FORMULÁRIO DE REGISTRO */}
         <div className="lg:col-span-1">
           <form action={registrarManutencao} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <h2 className="text-xl font-bold mb-4 text-orange-600 flex items-center gap-2">🛠️ Nova Manutenção</h2>
@@ -101,7 +99,6 @@ export default async function OficinaPage(props: { searchParams: Promise<{ error
           </form>
         </div>
 
-        {/* HISTÓRICO */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex justify-between items-center">
             <h2 className="text-lg font-bold">Histórico Recente</h2>
@@ -134,7 +131,8 @@ export default async function OficinaPage(props: { searchParams: Promise<{ error
                   </div>
                   <div className="shrink-0 flex flex-col items-end justify-center border-t md:border-t-0 md:border-l pt-3 md:pt-0 md:pl-6 border-gray-100">
                     <span className="text-xs text-gray-400 uppercase font-bold">Custo Total</span>
-                    <span className="text-xl font-bold text-green-600">R$ {m.cost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    {/* AQUI ESTÁ A CORREÇÃO: (m.cost ?? 0) garante que nunca seja null */}
+                    <span className="text-xl font-bold text-green-600">R$ {(m.cost ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               ))
