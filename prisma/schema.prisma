@@ -1,0 +1,87 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql" // MUDOU PARA POSTGRESQL
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // ADICIONADO PARA SUPABASE
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  name         String
+  username     String?       @unique
+  password     String?
+  role         String        @default("EXTERNO")
+  active       Boolean       @default(true)
+  
+  transactions Transaction[]
+  vehicleLogs  VehicleLog[]
+}
+
+model Material {
+  id           Int           @id @default(autoincrement())
+  name         String
+  category     String
+  minStock     Int           @default(5)
+  currentStock Int           @default(0)
+  transactions Transaction[]
+}
+
+model Transaction {
+  id              Int       @id @default(autoincrement())
+  materialId      Int
+  userId          Int?      
+  type            String
+  quantity        Int
+  relatedOutbound Int?
+  notes           String?   
+  assinatura      Boolean   @default(false) 
+  signatureData   String?   
+  createdAt       DateTime  @default(now())
+
+  material Material @relation(fields: [materialId], references: [id])
+  user     User?    @relation(fields: [userId], references: [id])
+}
+
+model Vehicle {
+  id          Int                  @id @default(autoincrement())
+  model       String
+  plate       String               @unique
+  currentKm   Int
+  
+  logs        VehicleLog[]
+  maintenances VehicleMaintenance[] 
+}
+
+model VehicleLog {
+  id            Int      @id @default(autoincrement())
+  vehicleId     Int
+  userId        Int
+  date          DateTime @default(now())
+  startKm       Int
+  endKm         Int?
+  cleanState    String
+  notes         String?
+  assinatura    Boolean  @default(false) 
+  signatureData String?  
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+}
+
+model VehicleMaintenance {
+  id             Int      @id @default(autoincrement())
+  vehicleId      Int
+  type           String   
+  date           DateTime @default(now())
+  performedKm    Int      
+  nextRevisionKm Int?     
+  description    String?  
+  cost           Float?   
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+}
