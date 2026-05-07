@@ -1,15 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Isso aqui ignora os erros de TypeScript no build (vai deixar passar o que está travando agora)
   typescript: {
+    // Isso ignora erros de tipo durante o build na Vercel
     ignoreBuildErrors: true,
   },
-  // Isso ignora avisos de ESLint que também podem travar o deploy
   eslint: {
+    // Isso ignora erros de linting durante o build
     ignoreDuringBuilds: true,
   },
-  // Desativa os indicadores de desenvolvimento (aquela bolinha do Node)
   devIndicators: {
+    // Remove a bolinha do Node.js
     buildActivity: false,
   },
 };

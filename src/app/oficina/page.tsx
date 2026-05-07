@@ -131,7 +131,6 @@ export default async function OficinaPage(props: { searchParams: Promise<{ error
                   </div>
                   <div className="shrink-0 flex flex-col items-end justify-center border-t md:border-t-0 md:border-l pt-3 md:pt-0 md:pl-6 border-gray-100">
                     <span className="text-xs text-gray-400 uppercase font-bold">Custo Total</span>
-                    {/* AQUI ESTÁ A CORREÇÃO: (m.cost ?? 0) garante que nunca seja null */}
                     <span className="text-xl font-bold text-green-600">R$ {(m.cost ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
