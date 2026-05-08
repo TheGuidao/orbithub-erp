@@ -18,9 +18,10 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
 
   const whereClause: any = {};
   if (busca) {
+    // AQUI ESTÁ A CORREÇÃO: mode: 'insensitive' adicionado ao nome e categoria
     whereClause.OR = [
-      { name: { contains: busca } },
-      { category: { contains: busca } }
+      { name: { contains: busca, mode: 'insensitive' } },
+      { category: { contains: busca, mode: 'insensitive' } }
     ];
   }
   if (categoria) {
@@ -106,7 +107,7 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
     <div className="p-4 md:p-8">
       <header className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Catálogo de Materiais</h1> {/* TITULO CORRIGIDO AQUI! */}
+          <h1 className="text-3xl font-bold text-gray-900">Catálogo de Materiais</h1>
           <p className="text-gray-500 mt-1">Cadastre, pesquise e edite os materiais do estoque.</p>
         </div>
         {materialToEdit && (
