@@ -11,8 +11,14 @@ export default async function VeiculosPage(props: { searchParams: Promise<{ busc
   const busca = searchParams?.busca || "";
   const editId = searchParams?.edit ? parseInt(searchParams.edit) : null;
 
+  // A MÁGICA ACONTECE AQUI: mode: 'insensitive' ignora maiúsculas e minúsculas
   const veiculos = await prisma.vehicle.findMany({
-    where: { OR: [{ model: { contains: busca } }, { plate: { contains: busca } }] },
+    where: { 
+      OR: [
+        { model: { contains: busca, mode: 'insensitive' } }, 
+        { plate: { contains: busca, mode: 'insensitive' } }
+      ] 
+    },
     orderBy: { model: 'asc' }
   });
 
