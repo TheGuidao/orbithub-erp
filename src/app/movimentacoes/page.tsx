@@ -45,7 +45,16 @@ export default async function MovimentacoesPage(props: { searchParams: Promise<{
 
   async function registrarMovimentacao(formData: FormData) {
     "use server";
-    const materialId = parseInt(formData.get("materialId") as string);
+    
+    // Extraindo o ID do material a partir do texto do Datalist
+    const materialInput = formData.get("materialInput") as string;
+    const idMatch = materialInput.match(/\[ID:\s*(\d+)\]/);
+    
+    if (!idMatch) {
+      redirect("/movimentacoes?error=material_invalido");
+    }
+    const materialId = parseInt(idMatch[1]);
+
     const type = formData.get("type") as string;
     const quantity = parseInt(formData.get("quantity") as string);
     const userIdString = formData.get("userId") as string;
@@ -64,7 +73,6 @@ export default async function MovimentacoesPage(props: { searchParams: Promise<{
       userId = null; 
     }
 
-    // NOVA TRAVA DE SEGURANÇA: Impede saldo negativo
     if (type === 'SAIDA' && quantity > material.currentStock) {
       redirect("/movimentacoes?error=estoque_insuficiente");
     }
@@ -146,19 +154,32 @@ export default async function MovimentacoesPage(props: { searchParams: Promise<{
           ⚠️ <strong>Estoque Insuficiente!</strong> Você tentou retirar uma quantidade maior do que a disponível no estoque.
         </div>
       )}
+      {erroURL === "material_invalido" && (
+        <div className="bg-red-100 text-red-700 px-4 py-3 rounded-lg mb-6 border border-red-400 font-medium">
+          ⚠️ <strong>Material Inválido!</strong> Por favor, selecione um material da lista suspensa.
+        </div>
+      )}
 
       <form action={registrarMovimentacao} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
         <h2 className="text-xl font-bold mb-4 text-gray-900">Nova Movimentação</h2>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+          
           <div className="md:col-span-2">
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Material</label>
-            <select name="materialId" required className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">Selecione...</option>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Buscar Material</label>
+            <input 
+              list="lista-materiais" 
+              name="materialInput" 
+              required 
+              placeholder="Digite o nome do material..." 
+              className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            />
+            <datalist id="lista-materiais">
               {materiais.map(m => (
-                <option key={m.id} value={m.id}>{m.name} (Estoque atual: {m.currentStock})</option>
+                <option key={m.id} value={`${m.name} (Estoque: ${m.currentStock}) [ID: ${m.id}]`} />
               ))}
-            </select>
+            </datalist>
           </div>
+
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Ação</label>
             <select name="type" required className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
