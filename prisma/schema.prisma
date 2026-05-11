@@ -20,6 +20,12 @@ model User {
   
   transactions Transaction[]
   vehicleLogs  VehicleLog[]
+  
+  // NOVA RELAÇÃO: Obras em que o técnico está alocado
+  serviceOrders ServiceOrder[]
+  
+  // NOVA RELAÇÃO: Comentários que o técnico fez nos cards
+  comments      Comment[]
 }
 
 model Material {
@@ -29,6 +35,9 @@ model Material {
   minStock     Int           @default(5)
   currentStock Int           @default(0)
   transactions Transaction[]
+  
+  // NOVA RELAÇÃO: Histórico de quais obras usaram este material
+  serviceOrders ServiceOrderMaterial[]
 }
 
 model Transaction {
@@ -48,13 +57,16 @@ model Transaction {
 }
 
 model Vehicle {
-  id          Int                  @id @default(autoincrement())
-  model       String
-  plate       String               @unique
-  currentKm   Int
+  id             Int                  @id @default(autoincrement())
+  model          String
+  plate          String               @unique
+  currentKm      Int
   
-  logs        VehicleLog[]
-  maintenances VehicleMaintenance[] 
+  logs           VehicleLog[]
+  maintenances   VehicleMaintenance[] 
+  
+  // NOVA RELAÇÃO: Obras em que este veículo foi utilizado
+  serviceOrders  ServiceOrder[]
 }
 
 model VehicleLog {
@@ -84,4 +96,76 @@ model VehicleMaintenance {
   cost           Float?   
 
   vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+}
+
+// ==========================================
+// NOVO MÓDULO: OBRAS E AGENDAS (KANBAN)
+// ==========================================
+
+model ServiceOrder {
+  id              Int       @id @default(autoincrement())
+  title           String    // Ex: "Obra Bonadio - Home Theater"
+  description     String?   // Detalhes da obra
+  address         String?   // Endereço (vai virar link do Waze/Maps)
+  date            DateTime? // Data agendada
+  startTime       String?   // Ex: "09:00"
+  endTime         String?   // Ex: "14:00"
+  status          String    @default("AGENDADO") // AGENDADO, EM_ANDAMENTO, CONCLUIDO
+  clientSignature String?   // Assinatura do cliente em base64
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Ligações Múltiplas (Técnicos e Veículos)
+  team            User[]    // Equipe alocada para a obra
+  vehicles        Vehicle[] // Veículos utilizados na obra
+  
+  // Outras Informações do Card
+  materials       ServiceOrderMaterial[] // Materiais separados/usados
+  comments        Comment[]              // Comentários do time
+  checklist       ChecklistItem[]        // Tarefas a executar
+  attachments     Attachment[]           // Fotos, PDFs, DWG
+}
+
+// Tabela auxiliar: Registra QUANTOS materiais específicos foram para a obra
+model ServiceOrderMaterial {
+  id             Int          @id @default(autoincrement())
+  quantity       Int          // Quantidade de material retirado
+  serviceOrderId Int
+  materialId     Int
+  
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  material       Material     @relation(fields: [materialId], references: [id])
+}
+
+// Comentários dentro do Card
+model Comment {
+  id             Int          @id @default(autoincrement())
+  content        String
+  createdAt      DateTime     @default(now())
+  serviceOrderId Int
+  userId         Int
+  
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id])
+}
+
+// Checklist de Tarefas do Card
+model ChecklistItem {
+  id             Int          @id @default(autoincrement())
+  task           String
+  isDone         Boolean      @default(false)
+  serviceOrderId Int
+  
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+}
+
+// Anexos (Arquivos salvos no Storage)
+model Attachment {
+  id             Int          @id @default(autoincrement())
+  fileName       String
+  fileUrl        String       // Link de onde o arquivo está salvo na nuvem
+  serviceOrderId Int
+  createdAt      DateTime     @default(now())
+  
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
 }

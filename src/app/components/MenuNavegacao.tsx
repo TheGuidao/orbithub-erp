@@ -18,6 +18,10 @@ export default function MenuNavegacao({ roleUsuario, nomeUsuario }: { roleUsuari
     return (
       <>
         <Link href="/" className={`${baseClass} ${isActive('/') ? activeClass : inactiveClass}`}>Painel</Link>
+        
+        {/* NOVA ABA ADICIONADA AQUI */}
+        <Link href="/obras" className={`${baseClass} ${isActive('/obras') ? activeClass : inactiveClass}`}>Obras e Agendas</Link>
+        
         <Link href="/materiais" className={`${baseClass} ${isActive('/materiais') ? activeClass : inactiveClass}`}>Catálogo</Link>
         <Link href="/movimentacoes" className={`${baseClass} ${isActive('/movimentacoes') ? activeClass : inactiveClass}`}>Movimentações</Link>
         <Link href="/frota" className={`${baseClass} ${isActive('/frota') ? activeClass : inactiveClass}`}>Uso da Frota</Link>
