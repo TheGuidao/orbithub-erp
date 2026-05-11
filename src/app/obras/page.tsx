@@ -6,10 +6,22 @@ import { redirect } from "next/navigation";
 
 const prisma = new PrismaClient();
 
-export default async function ObrasPage(props: { searchParams: Promise<{ nova?: string, data?: string }> }) {
+export default async function ObrasPage(props: { searchParams: Promise<{ nova?: string, data?: string, todos?: string }> }) {
   const searchParams = await props.searchParams;
   const showNovaObra = searchParams?.nova === 'true';
-  const filtroData = searchParams?.data || ""; // Data vinda do filtro (YYYY-MM-DD)
+  const verTodos = searchParams?.todos === 'true';
+  
+  // Pega a data de hoje ajustada para o fuso horário do Brasil (-3h)
+  const dataAtual = new Date(new Date().getTime() - 3 * 60 * 60 * 1000).toISOString().split('T')[0];
+  
+  // Lógica inteligente: Se clicou em "Ver Todos", fica vazio. Se filtrou uma data, usa ela. Senão, mostra HOJE.
+  const paramData = searchParams?.data;
+  let filtroData = "";
+  if (paramData) {
+    filtroData = paramData;
+  } else if (!verTodos) {
+    filtroData = dataAtual;
+  }
 
   // Busca as obras no banco ordenadas pela data mais próxima
   let obras = await prisma.serviceOrder.findMany({
@@ -17,11 +29,10 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
     orderBy: { date: 'asc' }
   });
 
-  // Filtro Inteligente de Data (Agenda)
+  // Aplica o filtro de Data (Agenda) se houver
   if (filtroData) {
     obras = obras.filter(o => {
       if (!o.date) return false;
-      // Converte a data do banco para o formato YYYY-MM-DD para comparar com o filtro
       const dataObra = o.date.toISOString().split('T')[0];
       return dataObra === filtroData;
     });
@@ -39,7 +50,6 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
     
     let dateObj = null;
     if (dateString) {
-      // Truque de fuso horário: adiciona T12:00:00Z para garantir que o dia não mude no servidor
       dateObj = new Date(`${dateString}T12:00:00Z`);
     }
 
@@ -54,7 +64,7 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
     }
     
     revalidatePath("/obras");
-    redirect("/obras"); // Fecha o modal
+    redirect("/obras"); 
   }
 
   // SERVER ACTION: Excluir Obra
@@ -67,19 +77,17 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
 
   // Componente visual do Card
   const ObraCard = ({ obra }: { obra: any }) => {
-    // Formata a data para exibir no card (Ex: 11/05/2026)
     const dataFormatada = obra.date 
       ? new Date(obra.date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) 
       : "Sem data";
 
     return (
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-3 group hover:shadow-md transition flex flex-col">
-        <div className="flex justify-between items-start mb-1">
+        <div className="mb-2">
+          {/* Título sem a #id agora */}
           <h3 className="font-bold text-gray-900 leading-tight">{obra.title}</h3>
-          <span className="text-xs font-bold text-gray-400">#{obra.id}</span>
         </div>
         
-        {/* Exibição da Data */}
         <div className="mb-2">
           <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 flex inline-flex items-center gap-1">
             📅 {dataFormatada}
@@ -91,7 +99,6 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
         </p>
         
         <div className="flex justify-between items-center border-t border-gray-100 pt-3 mt-auto">
-          {/* Botão de Excluir */}
           <form action={deletarObra}>
             <input type="hidden" name="id" value={obra.id} />
             <button 
@@ -103,7 +110,6 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
             </button>
           </form>
 
-          {/* Botão de Acessar Detalhes */}
           <Link href={`/obras/detalhes/${obra.id}`} className="text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 px-3 py-1.5 rounded transition">
             Ver OS ➔
           </Link>
@@ -138,6 +144,7 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
                   type="date" 
                   name="date" 
                   required 
+                  defaultValue={dataAtual} // Já vem preenchido com a data de hoje ao abrir
                   className="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -158,22 +165,23 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
           <p className="text-gray-500 mt-1">Gerencie o andamento e a agenda diária de serviços.</p>
         </div>
         
-        <div className="flex flex-wrap items-center gap-3">
-          {/* FILTRO DE AGENDA */}
-          <form method="GET" className="flex items-center gap-2 bg-white p-1 rounded-lg border border-gray-200 shadow-sm">
-            <span className="text-sm font-bold text-gray-500 pl-2">📅 Agenda:</span>
+        <div className="flex flex-wrap items-center gap-4">
+          {/* FILTRO DE AGENDA MELHORADO */}
+          <form method="GET" className="flex items-center gap-2">
+            <span className="text-sm font-bold text-gray-600">📅 Agenda:</span>
             <input 
               type="date" 
               name="data" 
               defaultValue={filtroData} 
-              className="border-none text-sm outline-none bg-transparent cursor-pointer font-medium text-gray-700 focus:ring-0" 
+              // Melhoria no CSS: Input mais largo, com borda clicável inteira
+              className="border border-gray-300 bg-white p-2 rounded-lg text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer w-[140px]" 
             />
-            <button type="submit" className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded text-sm font-bold hover:bg-blue-100 transition">
-              Filtrar
+            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition">
+              Ir
             </button>
-            {filtroData && (
-              <Link href="/obras" className="px-2 text-xs text-red-500 hover:underline font-bold">
-                Limpar
+            {!verTodos && (
+              <Link href="/obras?todos=true" className="px-3 text-xs text-blue-600 hover:text-blue-800 font-bold bg-blue-50 py-2 rounded-lg border border-blue-100 transition">
+                Ver Todos os Dias
               </Link>
             )}
           </form>
