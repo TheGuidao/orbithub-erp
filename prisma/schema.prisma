@@ -111,7 +111,12 @@ model ServiceOrder {
   startTime       String?   // Ex: "09:00"
   endTime         String?   // Ex: "14:00"
   status          String    @default("AGENDADO") // AGENDADO, EM_ANDAMENTO, CONCLUIDO
+  
+  // Dados da Assinatura
   clientSignature String?   // Assinatura do cliente em base64
+  clientName      String?   // NOVO: Nome de quem assinou
+  clientCpf       String?   // NOVO: CPF de quem assinou (Opcional)
+  
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

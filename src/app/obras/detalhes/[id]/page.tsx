@@ -2,6 +2,7 @@
 import { PrismaClient } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
+import AssinaturaCard from "../../../components/AssinaturaCard"; // IMPORTAÇÃO DO NOVO COMPONENTE
 
 const prisma = new PrismaClient();
 
@@ -9,7 +10,6 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
   const params = await props.params;
   const id = parseInt(params.id);
 
-  // 1. Busca os dados da Obra com TODAS as conexões
   const obra = await prisma.serviceOrder.findUnique({
     where: { id },
     include: {
@@ -24,21 +24,20 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
 
   if (!obra) return <div className="p-10 text-center font-bold text-red-500">Obra não encontrada.</div>;
 
-  // 2. Busca dados para os seletores (Equipe, Veículos, Materiais)
   const [todosUsuarios, todosVeiculos, todosMateriais] = await Promise.all([
     prisma.user.findMany({ where: { active: true }, orderBy: { name: 'asc' } }),
     prisma.vehicle.findMany({ orderBy: { model: 'asc' } }),
     prisma.material.findMany({ orderBy: { name: 'asc' } }),
   ]);
 
-  // --- SERVER ACTIONS (Ações do Card) ---
+  // --- SERVER ACTIONS ---
 
   async function atualizarStatus(formData: FormData) {
     "use server";
     const status = formData.get("status") as string;
     await prisma.serviceOrder.update({ where: { id }, data: { status } });
     revalidatePath(`/obras/detalhes/${id}`);
-    revalidatePath(`/obras`); // Atualiza o quadro Kanban também
+    revalidatePath(`/obras`);
   }
 
   async function salvarDetalhesBasicos(formData: FormData) {
@@ -60,11 +59,9 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
     "use server";
     const userIdString = formData.get("userId") as string;
     if (!userIdString) return;
-    const userId = parseInt(userIdString);
-    
     await prisma.serviceOrder.update({
       where: { id },
-      data: { team: { connect: { id: userId } } }
+      data: { team: { connect: { id: parseInt(userIdString) } } }
     });
     revalidatePath(`/obras/detalhes/${id}`);
   }
@@ -73,11 +70,9 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
     "use server";
     const vehicleIdString = formData.get("vehicleId") as string;
     if (!vehicleIdString) return;
-    const vehicleId = parseInt(vehicleIdString);
-
     await prisma.serviceOrder.update({
       where: { id },
-      data: { vehicles: { connect: { id: vehicleId } } }
+      data: { vehicles: { connect: { id: parseInt(vehicleIdString) } } }
     });
     revalidatePath(`/obras/detalhes/${id}`);
   }
@@ -92,19 +87,16 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
     const materialId = parseInt(materialIdString);
     const quantity = parseInt(quantityString);
 
-    // 1. Registra na Obra
     await prisma.serviceOrderMaterial.create({
       data: { serviceOrderId: id, materialId, quantity }
     });
 
-    // 2. BAIXA AUTOMÁTICA NO ESTOQUE E GERA TRANSAÇÃO
     const mat = await prisma.material.findUnique({ where: { id: materialId } });
     if (mat) {
       await prisma.material.update({
         where: { id: materialId },
         data: { currentStock: mat.currentStock - quantity }
       });
-
       await prisma.transaction.create({
         data: {
           materialId,
@@ -140,14 +132,28 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
     "use server";
     const content = formData.get("content") as string;
     if (!content) return;
-    // Por enquanto usamos o ID 1 (Admin) como fallback
     await prisma.comment.create({ 
       data: { serviceOrderId: id, content, userId: 1 } 
     });
     revalidatePath(`/obras/detalhes/${id}`);
   }
 
-  // Links de GPS Corrigidos
+  // AÇÃO QUE RECEBE O DESENHO DO CLIENT COMPONENT E SALVA NO BANCO
+  async function receberAssinatura(obraId: number, nome: string, cpf: string, assinaturaBase64: string) {
+    "use server";
+    await prisma.serviceOrder.update({
+      where: { id: obraId },
+      data: {
+        clientName: nome,
+        clientCpf: cpf,
+        clientSignature: assinaturaBase64,
+        status: 'CONCLUIDO' // Muda para verde automaticamente!
+      }
+    });
+    revalidatePath(`/obras/detalhes/${id}`);
+    revalidatePath(`/obras`);
+  }
+
   const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(obra.address || "")}`;
   const wazeUrl = `https://waze.com/ul?q=${encodeURIComponent(obra.address || "")}`;
 
@@ -162,12 +168,12 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
           </Link>
           
           <div className="flex flex-wrap items-center gap-3">
-            {/* CORREÇÃO DO STATUS: Removido o onChange e adicionado o botão */}
             <form action={atualizarStatus} className="flex items-center gap-2 bg-white p-1 rounded-lg shadow-sm border border-gray-200">
               <select 
+                key={obra.status} 
                 name="status" 
                 defaultValue={obra.status}
-                className={`font-bold px-3 py-1.5 rounded outline-none transition text-sm ${
+                className={`font-bold px-3 py-1.5 rounded outline-none transition text-sm cursor-pointer ${
                   obra.status === 'AGENDADO' ? 'text-yellow-700 bg-yellow-50' :
                   obra.status === 'EM_ANDAMENTO' ? 'text-blue-700 bg-blue-50' :
                   'text-green-700 bg-green-50'
@@ -193,7 +199,6 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
           {/* COLUNA ESQUERDA: CONTEÚDO PRINCIPAL */}
           <div className="lg:col-span-2 space-y-6">
             
-            {/* TÍTULO E DESCRIÇÃO */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
               <h1 className="text-3xl font-black text-gray-900 mb-6">{obra.title}</h1>
               <form action={salvarDetalhesBasicos} className="space-y-4">
@@ -214,7 +219,7 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
                       name="address" 
                       defaultValue={obra.address || ""}
                       placeholder="Rua, Número, Cidade..."
-                      className="w-full mt-1 p-2.5 border border-gray-200 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      className="w-full mt-1 p-3 border border-gray-200 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     />
                     {obra.address && (
                       <div className="flex gap-2 mt-2">
@@ -226,11 +231,11 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-xs font-bold text-gray-400 uppercase">Início</label>
-                      <input type="time" name="startTime" defaultValue={obra.startTime || ""} className="w-full mt-1 p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm" />
+                      <input type="time" name="startTime" defaultValue={obra.startTime || ""} className="w-full block mt-1 p-3 border border-gray-200 rounded-lg bg-gray-50 text-sm cursor-pointer outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div>
                       <label className="text-xs font-bold text-gray-400 uppercase">Fim</label>
-                      <input type="time" name="endTime" defaultValue={obra.endTime || ""} className="w-full mt-1 p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm" />
+                      <input type="time" name="endTime" defaultValue={obra.endTime || ""} className="w-full block mt-1 p-3 border border-gray-200 rounded-lg bg-gray-50 text-sm cursor-pointer outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                   </div>
                 </div>
@@ -353,13 +358,27 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
               </form>
             </div>
 
-            {/* ASSINATURA DO CLIENTE (Placeholder) */}
+            {/* ASSINATURA E CONCLUSÃO AUTOMÁTICA */}
             <div className="bg-slate-900 p-5 rounded-2xl shadow-lg text-white">
               <h2 className="text-sm font-bold text-slate-400 uppercase mb-3">✍️ Assinatura de Entrega</h2>
-              <div className="bg-slate-800 h-32 rounded-xl border-2 border-dashed border-slate-600 flex flex-col items-center justify-center text-slate-400 p-4">
-                <span className="text-2xl mb-1">📝</span>
-                <span className="text-[10px] text-center font-medium">A assinatura digital será liberada no fechamento da O.S.</span>
-              </div>
+              
+              {obra.clientSignature ? (
+                <div className="bg-green-500/20 border border-green-500/50 p-4 rounded-xl">
+                  <div className="flex items-center justify-between border-b border-green-500/30 pb-3 mb-3">
+                    <div>
+                      <p className="text-[10px] text-green-400 font-bold uppercase mb-1">Obra Concluída & Assinada</p>
+                      <p className="text-sm font-medium text-white">{obra.clientName}</p>
+                      {obra.clientCpf && <p className="text-[10px] text-slate-400">CPF: {obra.clientCpf}</p>}
+                    </div>
+                    <span className="text-2xl">✅</span>
+                  </div>
+                  <div className="bg-white/10 rounded-lg p-2 flex justify-center">
+                    <img src={obra.clientSignature} alt="Assinatura Cliente" className="h-16" />
+                  </div>
+                </div>
+              ) : (
+                <AssinaturaCard obraId={obra.id} salvarAssinatura={receberAssinatura} />
+              )}
             </div>
 
           </div>
