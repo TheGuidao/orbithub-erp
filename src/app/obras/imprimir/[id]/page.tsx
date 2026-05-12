@@ -1,6 +1,7 @@
 // src/app/obras/imprimir/[id]/page.tsx
 import { PrismaClient } from "@prisma/client";
 import Link from "next/link";
+import BotaoImprimir from "../../../../components/BotaoImprimir";
 
 const prisma = new PrismaClient();
 
@@ -27,24 +28,18 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
   return (
     <div className="bg-gray-200 min-h-screen py-8 print:bg-white print:py-0 flex justify-center">
       
-      {/* Botões Flutuantes (Escondidos na impressão) */}
-      <div className="fixed top-4 right-4 flex gap-2 print:hidden">
+      {/* Botões Flutuantes (Escondidos na impressão pela classe print:hidden) */}
+      <div className="fixed top-4 right-4 flex gap-2 print:hidden z-50">
         <Link href={`/obras/detalhes/${obra.id}`} className="bg-slate-800 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-slate-700 transition">
           ← Voltar
         </Link>
-        {/* O script onclick chama a janela de impressão/PDF do Windows/Mac */}
-        <button className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold shadow-lg hover:bg-blue-700 transition"
-          autoFocus 
-          style={{}} // Hack para Client Component no Server Component
-          // Como é Server Component, não podemos usar onClick nativo diretamente sem "use client", 
-          // mas como é uma página isolada, esse truque HTML puro resolve lindamente:
-        >
-          <a href="javascript:window.print()">🖨️ Salvar como PDF</a>
-        </button>
+        
+        {/* COMPONENTE CLIENTE QUE ABRE O PDF */}
+        <BotaoImprimir />
       </div>
 
       {/* FOLHA A4 (Padrão 210mm x 297mm) */}
-      <div className="bg-white w-[210mm] min-h-[297mm] shadow-2xl print:shadow-none p-12 text-slate-800">
+      <div className="bg-white w-[210mm] min-h-[297mm] shadow-2xl print:shadow-none p-12 text-slate-800 relative">
         
         {/* CABEÇALHO */}
         <header className="flex justify-between items-center border-b-2 border-slate-800 pb-6 mb-6">
@@ -54,7 +49,7 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
           </div>
           <div className="text-right">
             <h2 className="text-xl font-bold text-slate-400">ORDEM DE SERVIÇO</h2>
-            <p className="text-lg font-black text-slate-800">Nº {String(obra.id).padStart(5, '0')}</p>
+            {/* O número da O.S. foi removido daqui conforme solicitado! */}
           </div>
         </header>
 
