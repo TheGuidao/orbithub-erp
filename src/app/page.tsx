@@ -1,10 +1,22 @@
 // src/app/page.tsx
 import { PrismaClient } from "@prisma/client";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 const prisma = new PrismaClient();
 
 export default async function DashboardPage() {
+  // --- TRAVA DE SEGURANÇA ---
+  const cookieStore = await cookies();
+  const cargoDoUsuario = cookieStore.get("usuario_role")?.value;
+
+  // Se for Técnico, chuta ele direto para as pendências dele
+  if (cargoDoUsuario === "TECNICO") {
+    redirect("/obras");
+  }
+  // --------------------------
+
   // 1. Cálculos de Datas (Fuso Horário do Brasil)
   const agora = new Date(new Date().getTime() - 3 * 60 * 60 * 1000);
   const dataHojeStr = agora.toISOString().split('T')[0];
@@ -44,8 +56,6 @@ export default async function DashboardPage() {
 
         {/* CARDS DE MÉTRICAS RÁPIDAS (KPIs) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          
-          {/* Card 1: Obras de Hoje */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-blue-500 flex flex-col justify-between hover:shadow-md transition">
             <div className="flex justify-between items-start">
               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Obras Hoje</h3>
@@ -56,8 +66,6 @@ export default async function DashboardPage() {
               <p className="text-xs text-blue-600 font-bold mt-1">Agendadas para hoje</p>
             </div>
           </div>
-
-          {/* Card 2: Alertas de Estoque */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-red-500 flex flex-col justify-between hover:shadow-md transition">
             <div className="flex justify-between items-start">
               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Alerta de Estoque</h3>
@@ -68,8 +76,6 @@ export default async function DashboardPage() {
               <p className="text-xs text-red-500 font-bold mt-1">Itens no limite mínimo</p>
             </div>
           </div>
-
-          {/* Card 3: Obras em Andamento */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-yellow-500 flex flex-col justify-between hover:shadow-md transition">
             <div className="flex justify-between items-start">
               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Em Andamento</h3>
@@ -80,8 +86,6 @@ export default async function DashboardPage() {
               <p className="text-xs text-yellow-600 font-bold mt-1">Serviços ativos no quadro</p>
             </div>
           </div>
-
-          {/* Card 4: Concluídas no Mês */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-green-500 flex flex-col justify-between hover:shadow-md transition">
             <div className="flex justify-between items-start">
               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Concluídas no Mês</h3>
@@ -92,13 +96,10 @@ export default async function DashboardPage() {
               <p className="text-xs text-green-600 font-bold mt-1">Sucesso operacional</p>
             </div>
           </div>
-
         </div>
 
-        {/* ÁREA INFERIOR: DUAS COLUNAS */}
+        {/* ÁREA INFERIOR */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
-          {/* COLUNA ESQUERDA: AGENDA DO DIA */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[400px]">
             <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
               <h2 className="font-bold text-slate-800">📌 Agenda de Hoje</h2>
@@ -138,13 +139,11 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          {/* COLUNA DIREITA: ALERTAS DE ESTOQUE */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[400px]">
             <div className="p-5 border-b border-slate-100 bg-red-50/30 flex justify-between items-center">
               <h2 className="font-bold text-slate-800 flex items-center gap-2">
                 <span className="text-red-500">🔴</span> Precisam de Reposição
               </h2>
-              {/* O LINK FOI CORRIGIDO AQUI PARA /materiais */}
               <Link href="/materiais" className="text-xs font-bold text-blue-600 hover:text-blue-800">Ver Estoque ➔</Link>
             </div>
             <div className="p-5 flex-1 overflow-y-auto custom-scrollbar">
@@ -173,7 +172,6 @@ export default async function DashboardPage() {
               )}
             </div>
           </div>
-
         </div>
       </div>
     </div>

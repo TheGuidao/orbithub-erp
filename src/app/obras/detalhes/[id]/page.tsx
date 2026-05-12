@@ -11,12 +11,12 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
   const params = await props.params;
   const id = parseInt(params.id);
 
-  // ---------------------------------------------------------
-  // SIMULAÇÃO DO SISTEMA DE LOGIN:
-  // Troque para "INTERNO" para editar o card, e "EXTERNO" para testar a visão do técnico na rua.
-  // ---------------------------------------------------------
-  const cargoDoUsuario = "EXTERNO"; 
+  import { cookies } from "next/headers"; // <-- Confirme se essa linha está lá em cima junto com os imports
 
+  // --- PUXANDO A SESSÃO REAL DO USUÁRIO ---
+  const cookieStore = await cookies();
+  const cargoDoUsuario = cookieStore.get("usuario_role")?.value || "TECNICO";
+  // ---------------------------------------------------------
   const obra = await prisma.serviceOrder.findUnique({
     where: { id },
     include: {
