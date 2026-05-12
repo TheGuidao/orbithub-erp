@@ -1,7 +1,7 @@
 // src/app/obras/imprimir/[id]/page.tsx
 import { PrismaClient } from "@prisma/client";
 import Link from "next/link";
-import BotaoImprimir from "../../../../components/BotaoImprimir";
+import BotaoImprimir from "../../../components/BotaoImprimir"; // CORREÇÃO AQUI: Apenas 3 níveis de subida
 
 const prisma = new PrismaClient();
 
@@ -49,7 +49,6 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
           </div>
           <div className="text-right">
             <h2 className="text-xl font-bold text-slate-400">ORDEM DE SERVIÇO</h2>
-            {/* O número da O.S. foi removido daqui conforme solicitado! */}
           </div>
         </header>
 
