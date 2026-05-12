@@ -1,168 +1,178 @@
 // src/app/page.tsx
 import { PrismaClient } from "@prisma/client";
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 
 const prisma = new PrismaClient();
 
 export default async function DashboardPage() {
-  // BLOQUEIO DE SEGURANÇA: SE FOR TÉCNICO, EXPULSA PARA AS PENDÊNCIAS
-  const cookieStore = await cookies();
-  if (cookieStore.get("usuario_role")?.value === 'TECNICO') {
-    redirect('/pendencias');
-  }
+  // 1. Cálculos de Datas (Fuso Horário do Brasil)
+  const agora = new Date(new Date().getTime() - 3 * 60 * 60 * 1000);
+  const dataHojeStr = agora.toISOString().split('T')[0];
+  const primeiroDiaMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
 
-  const materiais = await prisma.material.findMany();
-  const estoqueCritico = materiais.filter(m => m.currentStock <= m.minStock).length;
+  // 2. Busca simultânea de todos os dados cruciais (Performance máxima)
+  const [todasObras, materiais, veiculos] = await Promise.all([
+    prisma.serviceOrder.findMany({ include: { team: true }, orderBy: { date: 'asc' } }),
+    prisma.material.findMany({ orderBy: { name: 'asc' } }),
+    prisma.vehicle.findMany()
+  ]);
 
-  const totalVeiculos = await prisma.vehicle.count();
-  const veiculosEmUso = await prisma.vehicleLog.count({ where: { endKm: null } });
-  const veiculosDisponiveis = totalVeiculos - veiculosEmUso;
-
-  // LÓGICA ATUALIZADA: Conta apenas quem DEVOLVEU o carro limpo (endKm não é nulo)
-  const topTecnicosRaw = await prisma.vehicleLog.groupBy({
-    by: ['userId'],
-    where: { cleanState: 'Limpo', endKm: { not: null } }, 
-    _count: { id: true },
-    orderBy: { _count: { id: 'desc' } },
-    take: 5
-  });
+  // 3. Filtrando os dados para o Dashboard
+  const obrasHoje = todasObras.filter(o => o.date && o.date.toISOString().split('T')[0] === dataHojeStr);
+  const obrasPendentes = todasObras.filter(o => o.status !== 'CONCLUIDO');
+  const obrasConcluidasMes = todasObras.filter(o => o.status === 'CONCLUIDO' && new Date(o.updatedAt) >= primeiroDiaMes);
   
-  const users = await prisma.user.findMany();
-  const topTecnicos = topTecnicosRaw.map(t => ({
-    nome: users.find(u => u.id === t.userId)?.name || 'Desconhecido',
-    quantidade: t._count.id || 0
-  }));
-
-  const frotaMaisRodada = await prisma.vehicle.findMany({
-    orderBy: { currentKm: 'desc' },
-    take: 5
-  });
-
-  const hoje = new Date();
-  const seteDiasAtras = new Date();
-  seteDiasAtras.setDate(hoje.getDate() - 6);
-  seteDiasAtras.setHours(0, 0, 0, 0);
-
-  const transacoes7Dias = await prisma.transaction.findMany({
-    where: { createdAt: { gte: seteDiasAtras }, type: 'SAIDA' }
-  });
-
-  const ultimos7Dias = Array.from({ length: 7 }).map((_, i) => {
-    const d = new Date(seteDiasAtras);
-    d.setDate(d.getDate() + i);
-    const dataStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-    const count = transacoes7Dias
-      .filter(t => new Date(t.createdAt).toDateString() === d.toDateString())
-      .reduce((acc, curr) => acc + curr.quantity, 0);
-    return { data: dataStr, count };
-  });
-
-  const maxCount = Math.max(...ultimos7Dias.map(d => d.count), 1); 
+  // Lógica inteligente: Material com estoque igual ou menor que o mínimo configurado
+  const alertasEstoque = materiais.filter(m => m.currentStock <= m.minStock);
 
   return (
-    <div className="p-4 md:p-8">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard Interativo</h1>
-        <p className="text-gray-500 mt-1">Visão geral do Catálogo e Frota Smart Touch</p>
-      </header>
-
-      {/* GRID ATUALIZADO PARA 2 COLUNAS (Ficou mais elegante sem o card inútil) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+    <div className="p-4 md:p-8 bg-gray-50 min-h-[calc(100vh-60px)]">
+      <div className="max-w-7xl mx-auto">
         
-        {/* BLOCO ESTOQUE CRÍTICO -> AGORA É UM LINK CLICÁVEL! */}
-        <Link href="/materiais?critico=true" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between transition-all hover:-translate-y-1 hover:shadow-md hover:border-red-200 cursor-pointer group">
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="font-semibold text-gray-700 group-hover:text-red-600 transition-colors">Catálogo Crítico</h3>
-            <span className={`text-xs px-2 py-1 rounded-full font-bold ${estoqueCritico > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-              {estoqueCritico > 0 ? 'Alerta' : 'Estável'}
-            </span>
-          </div>
+        {/* CABEÇALHO DO PAINEL */}
+        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
           <div>
-            <p className="text-4xl font-bold text-gray-900 group-hover:text-red-600 transition-colors">{estoqueCritico}</p>
-            <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
-              Itens abaixo do mínimo 
-              <span className="text-xs text-red-500 opacity-0 group-hover:opacity-100 transition-opacity font-medium hidden md:inline">→ Clique para ver</span>
-            </p>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Visão Geral</h1>
+            <p className="text-slate-500 mt-1">Bem-vindo ao centro de comando da <span className="font-bold text-slate-700">Smart Touch</span>.</p>
           </div>
-        </Link>
+          <div className="flex gap-3">
+            <Link href="/obras?nova=true" className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition shadow-sm">
+              + Nova Obra
+            </Link>
+          </div>
+        </header>
 
-        {/* Card: Status da Frota */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between transition-transform hover:-translate-y-1">
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="font-semibold text-gray-700">Status da Frota</h3>
-            <span className={`text-xs px-2 py-1 rounded-full font-bold ${veiculosDisponiveis > 0 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-              {veiculosDisponiveis > 0 ? 'Pátio Livre' : 'Falta Carro'}
-            </span>
+        {/* CARDS DE MÉTRICAS RÁPIDAS (KPIs) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          
+          {/* Card 1: Obras de Hoje */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-blue-500 flex flex-col justify-between hover:shadow-md transition">
+            <div className="flex justify-between items-start">
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Obras Hoje</h3>
+              <span className="text-2xl">📅</span>
+            </div>
+            <div className="mt-4">
+              <p className="text-4xl font-black text-slate-800">{obrasHoje.length}</p>
+              <p className="text-xs text-blue-600 font-bold mt-1">Agendadas para hoje</p>
+            </div>
           </div>
-          <div>
-            <p className="text-4xl font-bold text-gray-900">{veiculosDisponiveis}<span className="text-xl text-gray-400 font-medium">/{totalVeiculos}</span></p>
-            <p className="text-sm text-gray-500 mt-1">Veículos disponíveis na base</p>
+
+          {/* Card 2: Alertas de Estoque */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-red-500 flex flex-col justify-between hover:shadow-md transition">
+            <div className="flex justify-between items-start">
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Alerta de Estoque</h3>
+              <span className="text-2xl">⚠️</span>
+            </div>
+            <div className="mt-4">
+              <p className="text-4xl font-black text-slate-800">{alertasEstoque.length}</p>
+              <p className="text-xs text-red-500 font-bold mt-1">Itens no limite mínimo</p>
+            </div>
           </div>
+
+          {/* Card 3: Obras em Andamento */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-yellow-500 flex flex-col justify-between hover:shadow-md transition">
+            <div className="flex justify-between items-start">
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Em Andamento</h3>
+              <span className="text-2xl">🚧</span>
+            </div>
+            <div className="mt-4">
+              <p className="text-4xl font-black text-slate-800">{obrasPendentes.length}</p>
+              <p className="text-xs text-yellow-600 font-bold mt-1">Serviços ativos no quadro</p>
+            </div>
+          </div>
+
+          {/* Card 4: Concluídas no Mês */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-green-500 flex flex-col justify-between hover:shadow-md transition">
+            <div className="flex justify-between items-start">
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Concluídas no Mês</h3>
+              <span className="text-2xl">✅</span>
+            </div>
+            <div className="mt-4">
+              <p className="text-4xl font-black text-slate-800">{obrasConcluidasMes.length}</p>
+              <p className="text-xs text-green-600 font-bold mt-1">Sucesso operacional</p>
+            </div>
+          </div>
+
         </div>
 
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* GRÁFICO: Volume de Saídas */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 lg:col-span-2">
-          <h3 className="font-bold text-gray-900 mb-6">Volume de Saídas (Últimos 7 dias)</h3>
-          <div className="h-64 flex items-end justify-between gap-2 pt-4">
-            {ultimos7Dias.map((dia, index) => {
-              const alturaPercentual = Math.round((dia.count / maxCount) * 100);
-              return (
-                <div key={index} className="flex flex-col items-center flex-1 group">
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-slate-700 mb-2">
-                    {dia.count > 0 ? dia.count : ''}
-                  </div>
-                  <div className="w-full max-w-[40px] bg-blue-500 rounded-t-md transition-all duration-500 hover:bg-blue-600" style={{ height: `${dia.count === 0 ? 2 : alturaPercentual}%` }}></div>
-                  <div className="text-xs text-gray-400 mt-3">{dia.data}</div>
+        {/* ÁREA INFERIOR: DUAS COLUNAS */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          {/* COLUNA ESQUERDA: AGENDA DO DIA */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[400px]">
+            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <h2 className="font-bold text-slate-800">📌 Agenda de Hoje</h2>
+              <Link href="/obras" className="text-xs font-bold text-blue-600 hover:text-blue-800">Ver Quadro Completo ➔</Link>
+            </div>
+            <div className="p-5 flex-1 overflow-y-auto custom-scrollbar">
+              {obrasHoje.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                  <span className="text-4xl mb-3">🏖️</span>
+                  <p className="text-sm font-medium">Nenhuma obra agendada para hoje.</p>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* RANKINGS ESQUERDA */}
-        <div className="flex flex-col gap-6">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex-1">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Top Organização (Devolveu Limpo)</h3>
-            <div className="space-y-4">
-              {topTecnicos.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">Nenhum dado registrado.</p>
               ) : (
-                topTecnicos.map((tec, idx) => (
-                  <div key={idx} className="flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-green-50 text-green-600 flex items-center justify-center font-bold text-xs border border-green-100">{idx + 1}º</div>
-                      <span className="text-sm font-medium text-gray-800">{tec.nome}</span>
-                    </div>
-                    <span className="text-sm font-bold text-green-600">{tec.quantidade} <span className="text-xs text-gray-400 font-normal">registros</span></span>
-                  </div>
-                ))
+                <div className="space-y-4">
+                  {obrasHoje.map(obra => (
+                    <Link key={obra.id} href={`/obras/detalhes/${obra.id}`} className="block bg-white border border-slate-200 p-4 rounded-xl hover:border-blue-300 hover:shadow-sm transition group">
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-bold text-slate-800 group-hover:text-blue-600 transition">{obra.title}</h3>
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase ${
+                          obra.status === 'AGENDADO' ? 'bg-yellow-100 text-yellow-700' :
+                          obra.status === 'EM_ANDAMENTO' ? 'bg-blue-100 text-blue-700' :
+                          'bg-green-100 text-green-700'
+                        }`}>
+                          {obra.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mb-3 truncate">📍 {obra.address || "Endereço não informado"}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {obra.team.map(t => (
+                          <span key={t.id} className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{t.name}</span>
+                        ))}
+                        {obra.team.length === 0 && <span className="text-[10px] italic text-slate-400">Sem equipe alocada</span>}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
               )}
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex-1">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Frota Mais Rodada</h3>
-            <div className="space-y-4">
-              {frotaMaisRodada.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">Nenhum veículo cadastrado.</p>
+          {/* COLUNA DIREITA: ALERTAS DE ESTOQUE */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[400px]">
+            <div className="p-5 border-b border-slate-100 bg-red-50/30 flex justify-between items-center">
+              <h2 className="font-bold text-slate-800 flex items-center gap-2">
+                <span className="text-red-500">🔴</span> Precisam de Reposição
+              </h2>
+              <Link href="/catalogo" className="text-xs font-bold text-blue-600 hover:text-blue-800">Ver Estoque ➔</Link>
+            </div>
+            <div className="p-5 flex-1 overflow-y-auto custom-scrollbar">
+              {alertasEstoque.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                  <span className="text-4xl mb-3">📦</span>
+                  <p className="text-sm font-medium">Estoque saudável. Nada em falta!</p>
+                </div>
               ) : (
-                frotaMaisRodada.map((v, idx) => (
-                  <div key={v.id} className="flex justify-between items-center">
-                    <div>
-                      <p className="text-sm font-bold text-gray-800">{v.model}</p>
-                      <p className="text-xs text-gray-500">{v.plate}</p>
+                <div className="space-y-3">
+                  {alertasEstoque.map(mat => (
+                    <div key={mat.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-lg">
+                      <div>
+                        <p className="font-bold text-slate-800 text-sm">{mat.name}</p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">{mat.category}</p>
+                      </div>
+                      <div className="text-right flex flex-col items-end">
+                        <span className={`text-lg font-black ${mat.currentStock === 0 ? 'text-red-600' : 'text-orange-500'}`}>
+                          {mat.currentStock} und
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-bold">Mínimo ideal: {mat.minStock}</span>
+                      </div>
                     </div>
-                    <span className="text-sm font-bold text-slate-700">{v.currentKm.toLocaleString('pt-BR')} <span className="text-xs text-gray-400 font-normal">km</span></span>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
           </div>
+
         </div>
       </div>
     </div>
