@@ -144,7 +144,8 @@ export default async function DashboardPage() {
               <h2 className="font-bold text-slate-800 flex items-center gap-2">
                 <span className="text-red-500">🔴</span> Precisam de Reposição
               </h2>
-              <Link href="/catalogo" className="text-xs font-bold text-blue-600 hover:text-blue-800">Ver Estoque ➔</Link>
+              {/* O LINK FOI CORRIGIDO AQUI PARA /materiais */}
+              <Link href="/materiais" className="text-xs font-bold text-blue-600 hover:text-blue-800">Ver Estoque ➔</Link>
             </div>
             <div className="p-5 flex-1 overflow-y-auto custom-scrollbar">
               {alertasEstoque.length === 0 ? (
