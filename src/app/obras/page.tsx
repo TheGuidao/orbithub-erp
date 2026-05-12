@@ -4,10 +4,17 @@ import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
 
 const prisma = new PrismaClient();
 
 export default async function ObrasPage(props: { searchParams: Promise<{ nova?: string, data?: string, todos?: string }> }) {
+  // --- PUXANDO A SESSÃO REAL DO USUÁRIO ---
+  const cookieStore = await cookies();
+  const cargoDoUsuario = cookieStore.get("usuario_role")?.value || "TECNICO";
+  const userId = cookieStore.get("usuario_id")?.value;
+  // ---------------------------------------------------------
+
   const searchParams = await props.searchParams;
   const showNovaObra = searchParams?.nova === 'true';
   const verTodos = searchParams?.todos === 'true';
@@ -24,8 +31,21 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
     filtroData = dataAtual;
   }
 
-  // Busca as obras no banco ordenadas pela data mais próxima
+  // LÓGICA DE VISIBILIDADE:
+  // Se for "INTERNO", vê todas as obras.
+  // Se for "TECNICO", vê SÓ as obras onde ele foi alocado pela equipe interna.
+  const whereClause: any = {};
+  if (cargoDoUsuario === "TECNICO" && userId) {
+    whereClause.team = {
+      some: {
+        id: parseInt(userId)
+      }
+    };
+  }
+
+  // Busca as obras no banco aplicando as regras de visibilidade
   let obras = await prisma.serviceOrder.findMany({
+    where: whereClause,
     include: { team: true },
     orderBy: { date: 'asc' }
   });
@@ -43,9 +63,16 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
   const emAndamento = obras.filter(o => o.status === 'EM_ANDAMENTO');
   const concluidas = obras.filter(o => o.status === 'CONCLUIDO');
 
-  // SERVER ACTION: Criar Obra
+  // SERVER ACTION: Criar Obra (Segurança extra: bloqueia técnicos)
   async function criarObra(formData: FormData) {
     "use server";
+    
+    // Verificação de segurança adicional no backend
+    const store = await cookies();
+    if (store.get("usuario_role")?.value !== "INTERNO") {
+       throw new Error("Acesso negado.");
+    }
+
     const title = formData.get("title") as string;
     const dateString = formData.get("date") as string;
     
@@ -68,9 +95,16 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
     redirect("/obras"); 
   }
 
-  // SERVER ACTION: Excluir Obra e Anexos
+  // SERVER ACTION: Excluir Obra e Anexos (Segurança extra)
   async function deletarObra(formData: FormData) {
     "use server";
+    
+    // Verificação de segurança adicional no backend
+    const store = await cookies();
+    if (store.get("usuario_role")?.value !== "INTERNO") {
+       throw new Error("Acesso negado.");
+    }
+
     const id = parseInt(formData.get("id") as string);
 
     // 1. Pega os anexos da obra antes de apagar o card
@@ -109,12 +143,12 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
     return (
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-3 group hover:shadow-md transition flex flex-col">
         <div className="mb-2">
-          {/* Título sem a #id agora */}
+          {/* Título */}
           <h3 className="font-bold text-gray-900 leading-tight">{obra.title}</h3>
         </div>
         
         <div className="mb-2">
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 flex inline-flex items-center gap-1">
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 inline-flex items-center gap-1">
             📅 {dataFormatada}
           </span>
         </div>
@@ -124,16 +158,22 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
         </p>
         
         <div className="flex justify-between items-center border-t border-gray-100 pt-3 mt-auto">
-          <form action={deletarObra}>
-            <input type="hidden" name="id" value={obra.id} />
-            <button 
-              type="submit" 
-              className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition"
-              title="Excluir OS"
-            >
-              🗑️
-            </button>
-          </form>
+          
+          {/* BLOQUEIO VISUAL: Só o cargo INTERNO consegue excluir a OS */}
+          {cargoDoUsuario === "INTERNO" ? (
+            <form action={deletarObra}>
+              <input type="hidden" name="id" value={obra.id} />
+              <button 
+                type="submit" 
+                className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition"
+                title="Excluir OS"
+              >
+                🗑️
+              </button>
+            </form>
+          ) : (
+            <div></div> // Espaço vazio para alinhar o botão "Ver OS" à direita
+          )}
 
           <Link href={`/obras/detalhes/${obra.id}`} className="text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 px-3 py-1.5 rounded transition">
             Ver OS ➔
@@ -146,8 +186,8 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
   return (
     <div className="p-4 md:p-8 h-[calc(100vh-60px)] flex flex-col">
       
-      {/* MODAL DE NOVA OBRA */}
-      {showNovaObra && (
+      {/* MODAL DE NOVA OBRA: TRAVADO PARA INTERNO */}
+      {showNovaObra && cargoDoUsuario === "INTERNO" && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
             <h2 className="text-xl font-bold mb-4 text-gray-900">Nova Ordem de Serviço</h2>
@@ -210,9 +250,12 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
             )}
           </form>
 
-          <Link href="/obras?nova=true" className="bg-slate-900 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-slate-800 transition shadow-sm flex items-center gap-2">
-            <span>+</span> Nova Obra
-          </Link>
+          {/* BLOQUEIO: Só Cargo INTERNO vê o botão de Nova Obra */}
+          {cargoDoUsuario === "INTERNO" && (
+            <Link href="/obras?nova=true" className="bg-slate-900 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-slate-800 transition shadow-sm flex items-center gap-2">
+              <span>+</span> Nova Obra
+            </Link>
+          )}
         </div>
       </header>
 

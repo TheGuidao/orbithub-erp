@@ -3,13 +3,19 @@ import { PrismaClient } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import AssinaturaCard from "../../../components/AssinaturaCard";
-import UploadAnexo from "../../../components/UploadAnexo"; // IMPORTAÇÃO DO NOVO COMPONENTE
+import UploadAnexo from "../../../components/UploadAnexo";
 
 const prisma = new PrismaClient();
 
 export default async function DetalhesObraPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const id = parseInt(params.id);
+
+  // ---------------------------------------------------------
+  // SIMULAÇÃO DO SISTEMA DE LOGIN:
+  // Troque para "INTERNO" para editar o card, e "EXTERNO" para testar a visão do técnico na rua.
+  // ---------------------------------------------------------
+  const cargoDoUsuario = "EXTERNO"; 
 
   const obra = await prisma.serviceOrder.findUnique({
     where: { id },
@@ -19,7 +25,7 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
       comments: { include: { user: true }, orderBy: { createdAt: 'desc' } },
       checklist: { orderBy: { id: 'asc' } },
       materials: { include: { material: true } },
-      attachments: true, // Garante que estamos buscando os anexos do banco
+      attachments: true,
     }
   });
 
@@ -110,7 +116,6 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
 
     revalidatePath(`/obras/detalhes/${id}`);
     revalidatePath(`/materiais`);
-    revalidatePath(`/movimentacoes`);
   }
 
   async function adicionarTarefa(formData: FormData) {
@@ -134,27 +139,45 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
     const content = formData.get("content") as string;
     if (!content) return;
     await prisma.comment.create({ 
-      data: { serviceOrderId: id, content, userId: 1 } 
+      data: { serviceOrderId: id, content, userId: 1 } // Simulando ID do usuário logado por enquanto
     });
     revalidatePath(`/obras/detalhes/${id}`);
   }
 
+  // --- AÇÕES DE AUTOMAÇÃO (PONTO ELETRÔNICO) ---
+  
+  async function iniciarServico() {
+    "use server";
+    const agora = new Date(new Date().getTime() - 3 * 60 * 60 * 1000); // Horário de Brasília
+    const horaInicio = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+    await prisma.serviceOrder.update({
+      where: { id },
+      data: { status: 'EM_ANDAMENTO', startTime: horaInicio }
+    });
+    revalidatePath(`/obras/detalhes/${id}`);
+    revalidatePath(`/obras`);
+  }
+
   async function receberAssinatura(obraId: number, nome: string, cpf: string, assinaturaBase64: string) {
     "use server";
+    const agora = new Date(new Date().getTime() - 3 * 60 * 60 * 1000); // Horário de Brasília
+    const horaFim = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false });
+
     await prisma.serviceOrder.update({
       where: { id: obraId },
       data: {
         clientName: nome,
         clientCpf: cpf,
         clientSignature: assinaturaBase64,
-        status: 'CONCLUIDO' 
+        status: 'CONCLUIDO',
+        endTime: horaFim
       }
     });
     revalidatePath(`/obras/detalhes/${id}`);
     revalidatePath(`/obras`);
   }
 
-  // NOVA AÇÃO: Salvar Anexo no Banco após o Upload para o Supabase
   async function salvarAnexoBanco(nomeArquivo: string, urlArquivo: string) {
     "use server";
     await prisma.attachment.create({
@@ -176,29 +199,42 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
             ← Voltar ao Quadro
           </Link>
           
-          <div className="flex flex-wrap items-center gap-3">
-            <form action={atualizarStatus} className="flex items-center gap-2 bg-white p-1 rounded-lg shadow-sm border border-gray-200">
-              <select 
-                key={obra.status} 
-                name="status" 
-                defaultValue={obra.status}
-                className={`font-bold px-3 py-1.5 rounded outline-none transition text-sm cursor-pointer ${
-                  obra.status === 'AGENDADO' ? 'text-yellow-700 bg-yellow-50' :
-                  obra.status === 'EM_ANDAMENTO' ? 'text-blue-700 bg-blue-50' :
-                  'text-green-700 bg-green-50'
-                }`}
-              >
-                <option value="AGENDADO">🟡 Agendado</option>
-                <option value="EM_ANDAMENTO">🔵 Em Andamento</option>
-                <option value="CONCLUIDO">🟢 Concluído</option>
-              </select>
-              <button type="submit" className="bg-slate-900 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-slate-800 transition">
-                Atualizar
-              </button>
-            </form>
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+            
+            {/* MUDANÇA MANUAL DE STATUS: Só aparece para o ADM (INTERNO) */}
+            {cargoDoUsuario === "INTERNO" && (
+              <form action={atualizarStatus} className="flex items-center gap-2 bg-white p-1 rounded-lg shadow-sm border border-gray-200">
+                <select 
+                  key={obra.status} 
+                  name="status" 
+                  defaultValue={obra.status}
+                  className={`font-bold px-3 py-1.5 rounded outline-none transition text-sm cursor-pointer ${
+                    obra.status === 'AGENDADO' ? 'text-yellow-700 bg-yellow-50' :
+                    obra.status === 'EM_ANDAMENTO' ? 'text-blue-700 bg-blue-50' :
+                    'text-green-700 bg-green-50'
+                  }`}
+                >
+                  <option value="AGENDADO">🟡 Agendado</option>
+                  <option value="EM_ANDAMENTO">🔵 Em Andamento</option>
+                  <option value="CONCLUIDO">🟢 Concluído</option>
+                </select>
+                <button type="submit" className="bg-slate-900 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-slate-800 transition">
+                  Atualizar
+                </button>
+              </form>
+            )}
 
-            <Link href={`/obras/imprimir/${obra.id}`} className="bg-white border border-gray-300 shadow-sm px-4 py-2 rounded-lg font-bold text-gray-700 hover:bg-gray-50 text-sm">
-              📄 Exportar PDF
+            {/* BOTÃO MÁGICO DE INICIAR O.S. (Técnico e ADM veem) */}
+            {obra.status === 'AGENDADO' && (
+              <form action={iniciarServico} className="w-full md:w-auto">
+                <button type="submit" className="w-full md:w-auto bg-green-600 text-white px-6 py-2 rounded-lg font-black text-sm shadow hover:bg-green-700 transition-all flex justify-center items-center gap-2">
+                  ▶️ INICIAR O.S.
+                </button>
+              </form>
+            )}
+
+            <Link href={`/obras/imprimir/${obra.id}`} className="bg-white border border-gray-300 shadow-sm px-4 py-2 rounded-lg font-bold text-gray-700 hover:bg-gray-50 text-sm flex items-center justify-center">
+              📄 PDF
             </Link>
           </div>
         </div>
@@ -209,49 +245,96 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
           <div className="lg:col-span-2 space-y-6">
             
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-              <h1 className="text-3xl font-black text-gray-900 mb-6">{obra.title}</h1>
-              <form action={salvarDetalhesBasicos} className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase">Detalhes da Obra / O.S.</label>
-                  <textarea 
-                    name="description" 
-                    defaultValue={obra.description || ""}
-                    placeholder="Descreva o que será feito nesta obra..."
-                    className="w-full mt-1 p-3 border border-gray-200 rounded-xl bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 h-28 text-sm"
-                  />
+              <div className="flex justify-between items-start mb-6">
+                <h1 className="text-3xl font-black text-gray-900">{obra.title}</h1>
+                <span className={`px-3 py-1 rounded font-bold text-xs uppercase hidden sm:block ${
+                  obra.status === 'AGENDADO' ? 'bg-yellow-100 text-yellow-700' :
+                  obra.status === 'EM_ANDAMENTO' ? 'bg-blue-100 text-blue-700' :
+                  'bg-green-100 text-green-700'
+                }`}>
+                  {obra.status.replace('_', ' ')}
+                </span>
+              </div>
+
+              {/* HORÁRIOS REGISTRADOS AUTOMATICAMENTE */}
+              <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100 mb-6">
+                <div className="text-center border-r border-slate-200">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Chegada / Início</p>
+                  <p className={`text-2xl font-black ${obra.startTime ? 'text-green-600' : 'text-slate-300'}`}>{obra.startTime || "--:--"}</p>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="text-center">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Saída / Término</p>
+                  <p className={`text-2xl font-black ${obra.endTime ? 'text-blue-600' : 'text-slate-300'}`}>{obra.endTime || "--:--"}</p>
+                </div>
+              </div>
+
+              {/* LÓGICA DE VISUALIZAÇÃO:
+                Se for ADM (INTERNO), mostra o formulário para ele digitar/editar.
+                Se for Técnico (EXTERNO), mostra apenas o texto para ele ler.
+              */}
+              {cargoDoUsuario === "INTERNO" ? (
+                <form action={salvarDetalhesBasicos} className="space-y-4">
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase">Endereço Completo</label>
-                    <input 
-                      name="address" 
-                      defaultValue={obra.address || ""}
-                      placeholder="Rua, Número, Cidade..."
-                      className="w-full mt-1 p-3 border border-gray-200 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    <label className="text-xs font-bold text-gray-400 uppercase">Detalhes da Obra / O.S.</label>
+                    <textarea 
+                      name="description" 
+                      defaultValue={obra.description || ""}
+                      placeholder="Descreva o que será feito nesta obra..."
+                      className="w-full mt-1 p-3 border border-gray-200 rounded-xl bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 h-28 text-sm"
                     />
-                    {obra.address && (
-                      <div className="flex gap-2 mt-2">
-                        <a href={googleMapsUrl} target="_blank" className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded font-bold hover:bg-green-200">📍 Google Maps</a>
-                        <a href={wazeUrl} target="_blank" className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold hover:bg-blue-200">🚙 Waze</a>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 uppercase">Endereço Completo</label>
+                      <input 
+                        name="address" 
+                        defaultValue={obra.address || ""}
+                        className="w-full mt-1 p-3 border border-gray-200 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                      {obra.address && (
+                        <div className="flex gap-2 mt-2">
+                          <a href={googleMapsUrl} target="_blank" className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded font-bold hover:bg-green-200">📍 Google Maps</a>
+                          <a href={wazeUrl} target="_blank" className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold hover:bg-blue-200">🚙 Waze</a>
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs font-bold text-gray-400 uppercase">Início Manual</label>
+                        <input type="time" name="startTime" defaultValue={obra.startTime || ""} className="w-full block mt-1 p-3 border border-gray-200 rounded-lg bg-gray-50 text-sm cursor-pointer outline-none focus:ring-2 focus:ring-blue-500" />
                       </div>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-xs font-bold text-gray-400 uppercase">Início</label>
-                      <input type="time" name="startTime" defaultValue={obra.startTime || ""} className="w-full block mt-1 p-3 border border-gray-200 rounded-lg bg-gray-50 text-sm cursor-pointer outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-gray-400 uppercase">Fim</label>
-                      <input type="time" name="endTime" defaultValue={obra.endTime || ""} className="w-full block mt-1 p-3 border border-gray-200 rounded-lg bg-gray-50 text-sm cursor-pointer outline-none focus:ring-2 focus:ring-blue-500" />
+                      <div>
+                        <label className="text-xs font-bold text-gray-400 uppercase">Fim Manual</label>
+                        <input type="time" name="endTime" defaultValue={obra.endTime || ""} className="w-full block mt-1 p-3 border border-gray-200 rounded-lg bg-gray-50 text-sm cursor-pointer outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
                     </div>
                   </div>
+                  <div className="flex justify-end pt-2">
+                    <button type="submit" className="bg-slate-900 text-white px-5 py-2 rounded-lg font-bold text-sm hover:bg-slate-800 transition">Salvar Alterações</button>
+                  </div>
+                </form>
+              ) : (
+                // VISÃO DO TÉCNICO (APENAS LEITURA)
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase border-b pb-1 mb-2">Detalhes da Obra</h3>
+                    <p className="text-sm text-gray-700 bg-gray-50 p-4 rounded-xl border border-gray-100 whitespace-pre-line">
+                      {obra.description || "Nenhum detalhe adicional."}
+                    </p>
+                  </div>
+                  {obra.address && (
+                    <div>
+                       <h3 className="text-xs font-bold text-gray-400 uppercase border-b pb-1 mb-2">Local do Serviço</h3>
+                       <p className="text-sm text-gray-800 mb-2 font-medium">{obra.address}</p>
+                       <div className="flex gap-2">
+                          <a href={googleMapsUrl} target="_blank" className="text-xs bg-green-100 text-green-700 px-3 py-2 rounded font-bold hover:bg-green-200">📍 Google Maps</a>
+                          <a href={wazeUrl} target="_blank" className="text-xs bg-blue-100 text-blue-700 px-3 py-2 rounded font-bold hover:bg-blue-200">🚙 Waze</a>
+                       </div>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-end pt-2">
-                  <button type="submit" className="bg-slate-900 text-white px-5 py-2 rounded-lg font-bold text-sm hover:bg-slate-800 transition">Salvar Dados</button>
-                </div>
-              </form>
+              )}
             </div>
 
             {/* CHECKLIST */}
@@ -262,23 +345,27 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
                   <form key={item.id} action={alternarTarefa} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition group">
                     <input type="hidden" name="taskId" value={item.id} />
                     <input type="hidden" name="done" value={String(item.isDone)} />
-                    <button type="submit" className={`w-5 h-5 rounded border-2 flex items-center justify-center transition ${item.isDone ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-blue-400'}`}>
-                      {item.isDone && <span className="text-white text-xs font-bold">✓</span>}
+                    <button type="submit" className={`w-6 h-6 rounded border-2 flex items-center justify-center transition shadow-sm ${item.isDone ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-blue-400'}`}>
+                      {item.isDone && <span className="text-white text-sm font-bold">✓</span>}
                     </button>
                     <span className={`text-sm ${item.isDone ? 'line-through text-gray-400' : 'text-gray-700 font-medium'}`}>{item.task}</span>
                   </form>
                 ))}
-                {obra.checklist.length === 0 && <p className="text-xs text-gray-400 italic p-2">Nenhuma tarefa criada.</p>}
+                {obra.checklist.length === 0 && <p className="text-xs text-gray-400 italic p-2">Nenhuma tarefa cadastrada para esta O.S.</p>}
               </div>
-              <form action={adicionarTarefa} className="flex gap-2">
-                <input name="task" required placeholder="Nova tarefa..." className="flex-1 border border-gray-200 p-2 rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500" />
-                <button type="submit" className="bg-slate-900 text-white px-4 rounded-lg font-bold text-sm hover:bg-slate-800">Adicionar</button>
-              </form>
+              
+              {/* Só o ADM cria tarefas novas */}
+              {cargoDoUsuario === "INTERNO" && (
+                <form action={adicionarTarefa} className="flex gap-2">
+                  <input name="task" required placeholder="Nova tarefa..." className="flex-1 border border-gray-200 p-2 rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500" />
+                  <button type="submit" className="bg-slate-900 text-white px-4 rounded-lg font-bold text-sm hover:bg-slate-800">Adicionar</button>
+                </form>
+              )}
             </div>
 
             {/* ANEXOS DA OBRA */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mt-6">
-              <h2 className="font-bold text-gray-900 mb-4">📎 Projetos e Arquivos</h2>
+              <h2 className="font-bold text-gray-900 mb-4">📎 Projetos e Fotos do Serviço</h2>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 {obra.attachments.map(arq => (
@@ -290,6 +377,7 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
                 {obra.attachments.length === 0 && <p className="text-xs text-gray-400 italic col-span-full">Nenhum arquivo anexado a esta obra.</p>}
               </div>
 
+              {/* Todo mundo pode enviar fotos (Provas de conclusão) */}
               <UploadAnexo obraId={obra.id} salvarNoBanco={salvarAnexoBanco} />
             </div>
 
@@ -324,15 +412,19 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
                 ))}
                 {obra.team.length === 0 && <span className="text-xs text-gray-400 italic">Nenhum técnico alocado.</span>}
               </div>
-              <form action={adicionarEquipe} className="flex gap-2">
-                <select name="userId" required className="flex-1 border border-gray-200 p-2 rounded-lg text-xs bg-gray-50 outline-none">
-                  <option value="">+ Adicionar Técnico</option>
-                  {todosUsuarios.filter(u => !obra.team.some(ot => ot.id === u.id)).map(u => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
-                <button type="submit" className="bg-slate-900 text-white px-3 rounded-lg font-bold text-sm hover:bg-slate-800">✓</button>
-              </form>
+              
+              {/* Só ADM aloca novos técnicos */}
+              {cargoDoUsuario === "INTERNO" && (
+                <form action={adicionarEquipe} className="flex gap-2 border-t pt-3 border-gray-100">
+                  <select name="userId" required className="flex-1 border border-gray-200 p-2 rounded-lg text-xs bg-gray-50 outline-none">
+                    <option value="">+ Adicionar Técnico</option>
+                    {todosUsuarios.filter(u => !obra.team.some(ot => ot.id === u.id)).map(u => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                  <button type="submit" className="bg-slate-900 text-white px-3 rounded-lg font-bold text-sm hover:bg-slate-800">✓</button>
+                </form>
+              )}
             </div>
 
             {/* VEÍCULO */}
@@ -347,15 +439,19 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
                 ))}
                 {obra.vehicles.length === 0 && <span className="text-xs text-gray-400 italic">Nenhum veículo selecionado.</span>}
               </div>
-              <form action={adicionarVeiculo} className="flex gap-2">
-                <select name="vehicleId" required className="flex-1 border border-gray-200 p-2 rounded-lg text-xs bg-gray-50 outline-none">
-                  <option value="">+ Adicionar Veículo</option>
-                  {todosVeiculos.filter(v => !obra.vehicles.some(ov => ov.id === v.id)).map(v => (
-                    <option key={v.id} value={v.id}>{v.model} ({v.plate})</option>
-                  ))}
-                </select>
-                <button type="submit" className="bg-slate-900 text-white px-3 rounded-lg font-bold text-sm hover:bg-slate-800">✓</button>
-              </form>
+              
+              {/* Só ADM aloca veículos */}
+              {cargoDoUsuario === "INTERNO" && (
+                <form action={adicionarVeiculo} className="flex gap-2 border-t pt-3 border-gray-100">
+                  <select name="vehicleId" required className="flex-1 border border-gray-200 p-2 rounded-lg text-xs bg-gray-50 outline-none">
+                    <option value="">+ Adicionar Veículo</option>
+                    {todosVeiculos.filter(v => !obra.vehicles.some(ov => ov.id === v.id)).map(v => (
+                      <option key={v.id} value={v.id}>{v.model} ({v.plate})</option>
+                    ))}
+                  </select>
+                  <button type="submit" className="bg-slate-900 text-white px-3 rounded-lg font-bold text-sm hover:bg-slate-800">✓</button>
+                </form>
+              )}
             </div>
 
             {/* MATERIAIS SEPARADOS */}
@@ -370,18 +466,22 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
                 ))}
                 {obra.materials.length === 0 && <span className="text-xs text-gray-400 italic">Nenhum material registrado.</span>}
               </div>
-              <form action={adicionarMaterial} className="space-y-2 border-t pt-3">
-                <select name="materialId" required className="w-full border border-gray-200 p-2 rounded-lg text-xs bg-gray-50 outline-none">
-                  <option value="">Buscar Material...</option>
-                  {todosMateriais.map(m => (
-                    <option key={m.id} value={m.id}>{m.name} (Saldo: {m.currentStock})</option>
-                  ))}
-                </select>
-                <div className="flex gap-2">
-                  <input type="number" name="quantity" required min="1" placeholder="Qtd" className="w-20 border border-gray-200 p-2 rounded-lg text-xs bg-gray-50 outline-none" />
-                  <button type="submit" className="flex-1 bg-blue-600 text-white rounded-lg font-bold text-xs hover:bg-blue-700 transition">Baixar Estoque</button>
-                </div>
-              </form>
+              
+              {/* Só ADM dá baixa em materiais por aqui */}
+              {cargoDoUsuario === "INTERNO" && (
+                <form action={adicionarMaterial} className="space-y-2 border-t pt-3 border-gray-100">
+                  <select name="materialId" required className="w-full border border-gray-200 p-2 rounded-lg text-xs bg-gray-50 outline-none">
+                    <option value="">Buscar Material...</option>
+                    {todosMateriais.map(m => (
+                      <option key={m.id} value={m.id}>{m.name} (Saldo: {m.currentStock})</option>
+                    ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <input type="number" name="quantity" required min="1" placeholder="Qtd" className="w-20 border border-gray-200 p-2 rounded-lg text-xs bg-gray-50 outline-none" />
+                    <button type="submit" className="flex-1 bg-blue-600 text-white rounded-lg font-bold text-xs hover:bg-blue-700 transition">Baixar Estoque</button>
+                  </div>
+                </form>
+              )}
             </div>
 
             {/* ASSINATURA E CONCLUSÃO AUTOMÁTICA */}
@@ -392,14 +492,14 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
                 <div className="bg-green-500/20 border border-green-500/50 p-4 rounded-xl">
                   <div className="flex items-center justify-between border-b border-green-500/30 pb-3 mb-3">
                     <div>
-                      <p className="text-[10px] text-green-400 font-bold uppercase mb-1">Obra Concluída & Assinada</p>
+                      <p className="text-[10px] text-green-400 font-bold uppercase mb-1">Obra Concluída</p>
                       <p className="text-sm font-medium text-white">{obra.clientName}</p>
                       {obra.clientCpf && <p className="text-[10px] text-slate-400">CPF: {obra.clientCpf}</p>}
                     </div>
                     <span className="text-2xl">✅</span>
                   </div>
                   <div className="bg-white/10 rounded-lg p-2 flex justify-center">
-                    <img src={obra.clientSignature} alt="Assinatura Cliente" className="h-16" />
+                    <img src={obra.clientSignature} alt="Assinatura Cliente" className="h-16 invert" />
                   </div>
                 </div>
               ) : (
