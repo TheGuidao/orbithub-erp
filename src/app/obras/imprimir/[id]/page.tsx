@@ -28,9 +28,13 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
   return (
     <div className="bg-gray-200 min-h-screen py-8 flex flex-col items-center">
       
-      {/* MÁGICA DO CSS DE IMPRESSÃO */}
+      {/* MÁGICA DO CSS DE IMPRESSÃO (Agora blindado contra páginas extras) */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
+          @page {
+            size: A4 portrait;
+            margin: 0mm; /* Remove a Data e a URL padrão do navegador */
+          }
           body * {
             visibility: hidden;
           }
@@ -41,9 +45,10 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
             position: absolute;
             left: 0;
             top: 0;
-            width: 100%;
+            width: 210mm;
+            height: 297mm; /* Trava a altura exata do A4 */
+            overflow: hidden; /* Corta qualquer pixel que tente gerar uma página 2 */
             margin: 0 !important;
-            padding: 20px !important;
             box-shadow: none !important;
           }
         }
@@ -58,10 +63,11 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
       </div>
 
       {/* FOLHA A4 (Padrão 210mm x 297mm) */}
-      <div id="folha-a4" className="bg-white w-[210mm] min-h-[297mm] shadow-2xl p-12 text-slate-800 relative">
+      {/* Reduzi o padding de p-12 para p-8 para dar mais respiro ao conteúdo sem estourar o limite */}
+      <div id="folha-a4" className="bg-white w-[210mm] min-h-[297mm] shadow-2xl p-8 md:p-12 text-slate-800 relative flex flex-col">
         
         {/* CABEÇALHO */}
-        <header className="flex justify-between items-center border-b-2 border-slate-800 pb-6 mb-6">
+        <header className="flex justify-between items-center border-b-2 border-slate-800 pb-6 mb-6 shrink-0">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tighter">SMART TOUCH</h1>
             <p className="text-xs font-bold text-slate-500 tracking-widest uppercase">Automação Residencial</p>
@@ -72,7 +78,7 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
         </header>
 
         {/* DADOS DA OBRA */}
-        <section className="mb-8">
+        <section className="mb-6 shrink-0">
           <h3 className="text-sm font-bold bg-slate-100 p-2 uppercase border-l-4 border-slate-800 mb-3">Detalhes do Serviço</h3>
           <div className="grid grid-cols-2 gap-4 text-sm mb-4">
             <div><span className="font-bold">Identificação:</span> {obra.title}</div>
@@ -81,14 +87,14 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
             <div><span className="font-bold">Horário de Início:</span> {obra.startTime || "--:--"}</div>
             <div><span className="font-bold">Horário de Término:</span> {obra.endTime || "--:--"}</div>
           </div>
-          <div className="border border-slate-200 p-3 text-sm min-h-[80px]">
+          <div className="border border-slate-200 p-3 text-sm min-h-[60px]">
             <span className="font-bold block mb-1">Descrição:</span>
             {obra.description || "Nenhuma descrição detalhada."}
           </div>
         </section>
 
         {/* MATERIAIS UTILIZADOS */}
-        <section className="mb-8">
+        <section className="mb-6 shrink-0">
           <h3 className="text-sm font-bold bg-slate-100 p-2 uppercase border-l-4 border-blue-600 mb-3">Materiais / Equipamentos Aplicados</h3>
           <table className="w-full text-sm border-collapse">
             <thead>
@@ -112,28 +118,28 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
         </section>
 
         {/* EQUIPE */}
-        <section className="mb-12">
+        <section className="mb-auto shrink-0">
           <h3 className="text-sm font-bold bg-slate-100 p-2 uppercase border-l-4 border-slate-800 mb-3">Equipe Técnica</h3>
           <p className="text-sm">
             {obra.team.map(t => t.name).join(", ") || "Equipe não especificada."}
           </p>
         </section>
 
-        {/* ASSINATURA */}
-        <section className="border-t-2 border-slate-200 pt-8 mt-auto flex flex-col items-center">
-          <p className="text-xs text-center text-slate-500 mb-8 max-w-lg">
+        {/* ASSINATURA (Sempre empurrada para o final da folha pelo mb-auto da seção acima) */}
+        <section className="border-t-2 border-slate-200 pt-6 shrink-0 flex flex-col items-center">
+          <p className="text-xs text-center text-slate-500 mb-6 max-w-lg">
             Declaro que os serviços descritos acima foram executados e finalizados a contento, assim como os materiais listados foram entregues e/ou instalados no local.
           </p>
           
           {obra.clientSignature ? (
             <div className="flex flex-col items-center">
-              <img src={obra.clientSignature} alt="Assinatura" className="h-20 mb-2 border-b border-slate-400 px-8" />
+              <img src={obra.clientSignature} alt="Assinatura" className="h-16 mb-2 border-b border-slate-400 px-8" />
               <p className="font-bold text-sm text-slate-800 uppercase">{obra.clientName}</p>
               {obra.clientCpf && <p className="text-xs text-slate-500">CPF: {obra.clientCpf}</p>}
             </div>
           ) : (
             <div className="flex flex-col items-center">
-              <div className="w-64 h-20 border-b border-slate-400 mb-2"></div>
+              <div className="w-64 h-16 border-b border-slate-400 mb-2"></div>
               <p className="font-bold text-sm text-slate-800 uppercase">Assinatura do Responsável</p>
             </div>
           )}
