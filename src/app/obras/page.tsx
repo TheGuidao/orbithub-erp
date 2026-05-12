@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 
 const prisma = new PrismaClient();
 
@@ -67,10 +68,34 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
     redirect("/obras"); 
   }
 
-  // SERVER ACTION: Excluir Obra
+  // SERVER ACTION: Excluir Obra e Anexos
   async function deletarObra(formData: FormData) {
     "use server";
     const id = parseInt(formData.get("id") as string);
+
+    // 1. Pega os anexos da obra antes de apagar o card
+    const obra = await prisma.serviceOrder.findUnique({
+      where: { id },
+      include: { attachments: true }
+    });
+
+    // 2. Se tiver arquivos, vai no Supabase e apaga o peso morto primeiro
+    if (obra && obra.attachments.length > 0) {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Descobre o nome exato do arquivo lá no balde cortando o final da URL
+      const arquivosParaApagar = obra.attachments.map(a => {
+        const partes = a.fileUrl.split('/');
+        return partes[partes.length - 1]; 
+      });
+
+      // Comando de detonação no Supabase Storage
+      await supabase.storage.from('obras-anexos').remove(arquivosParaApagar);
+    }
+
+    // 3. Agora sim, apaga o card e todo o texto do banco de dados de uma vez
     await prisma.serviceOrder.delete({ where: { id } });
     revalidatePath("/obras");
   }
@@ -173,7 +198,6 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
               type="date" 
               name="data" 
               defaultValue={filtroData} 
-              // Melhoria no CSS: Input mais largo, com borda clicável inteira
               className="border border-gray-300 bg-white p-2 rounded-lg text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer w-[140px]" 
             />
             <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition">
