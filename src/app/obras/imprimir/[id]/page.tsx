@@ -1,7 +1,7 @@
 // src/app/obras/imprimir/[id]/page.tsx
 import { PrismaClient } from "@prisma/client";
 import Link from "next/link";
-import BotaoImprimir from "../../../components/BotaoImprimir"; // CORREÇÃO AQUI: Apenas 3 níveis de subida
+import BotaoImprimir from "../../../../components/BotaoImprimir";
 
 const prisma = new PrismaClient();
 
@@ -26,20 +26,42 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
       : "___/___/______";
 
   return (
-    <div className="bg-gray-200 min-h-screen py-8 print:bg-white print:py-0 flex justify-center">
+    <div className="bg-gray-200 min-h-screen py-8 flex flex-col items-center">
       
-      {/* Botões Flutuantes (Escondidos na impressão pela classe print:hidden) */}
-      <div className="fixed top-4 right-4 flex gap-2 print:hidden z-50">
-        <Link href={`/obras/detalhes/${obra.id}`} className="bg-slate-800 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-slate-700 transition">
+      {/* MÁGICA DO CSS DE IMPRESSÃO: 
+        Este código garante que o Menu global do sistema NÃO saia no PDF.
+        Ele esconde o 'body' inteiro, e mostra APENAS a div com id 'folha-a4'.
+      */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #folha-a4, #folha-a4 * {
+            visibility: visible;
+          }
+          #folha-a4 {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0 !important;
+            padding: 20px !important;
+            box-shadow: none !important;
+          }
+        }
+      `}} />
+
+      {/* BARRA DE FERRAMENTAS - Posicionada em cima da folha de forma organizada */}
+      <div className="w-[210mm] flex justify-end gap-3 mb-4 print:hidden">
+        <Link href={`/obras/detalhes/${obra.id}`} className="bg-slate-800 text-white px-5 py-2.5 rounded-lg font-bold shadow hover:bg-slate-700 transition flex items-center">
           ← Voltar
         </Link>
-        
-        {/* COMPONENTE CLIENTE QUE ABRE O PDF */}
         <BotaoImprimir />
       </div>
 
       {/* FOLHA A4 (Padrão 210mm x 297mm) */}
-      <div className="bg-white w-[210mm] min-h-[297mm] shadow-2xl print:shadow-none p-12 text-slate-800 relative">
+      <div id="folha-a4" className="bg-white w-[210mm] min-h-[297mm] shadow-2xl p-12 text-slate-800 relative">
         
         {/* CABEÇALHO */}
         <header className="flex justify-between items-center border-b-2 border-slate-800 pb-6 mb-6">
