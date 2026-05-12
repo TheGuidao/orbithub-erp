@@ -2,7 +2,8 @@
 import { PrismaClient } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
-import AssinaturaCard from "../../../components/AssinaturaCard"; // IMPORTAÇÃO DO NOVO COMPONENTE
+import AssinaturaCard from "../../../components/AssinaturaCard";
+import UploadAnexo from "../../../components/UploadAnexo"; // IMPORTAÇÃO DO NOVO COMPONENTE
 
 const prisma = new PrismaClient();
 
@@ -18,7 +19,7 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
       comments: { include: { user: true }, orderBy: { createdAt: 'desc' } },
       checklist: { orderBy: { id: 'asc' } },
       materials: { include: { material: true } },
-      attachments: true,
+      attachments: true, // Garante que estamos buscando os anexos do banco
     }
   });
 
@@ -138,7 +139,6 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
     revalidatePath(`/obras/detalhes/${id}`);
   }
 
-  // AÇÃO QUE RECEBE O DESENHO DO CLIENT COMPONENT E SALVA NO BANCO
   async function receberAssinatura(obraId: number, nome: string, cpf: string, assinaturaBase64: string) {
     "use server";
     await prisma.serviceOrder.update({
@@ -147,11 +147,20 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
         clientName: nome,
         clientCpf: cpf,
         clientSignature: assinaturaBase64,
-        status: 'CONCLUIDO' // Muda para verde automaticamente!
+        status: 'CONCLUIDO' 
       }
     });
     revalidatePath(`/obras/detalhes/${id}`);
     revalidatePath(`/obras`);
+  }
+
+  // NOVA AÇÃO: Salvar Anexo no Banco após o Upload para o Supabase
+  async function salvarAnexoBanco(nomeArquivo: string, urlArquivo: string) {
+    "use server";
+    await prisma.attachment.create({
+      data: { fileName: nomeArquivo, fileUrl: urlArquivo, serviceOrderId: id }
+    });
+    revalidatePath(`/obras/detalhes/${id}`);
   }
 
   const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(obra.address || "")}`;
@@ -188,7 +197,6 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
               </button>
             </form>
 
-            {/* BOTÃO EXPORTAR PDF ATUALIZADO AQUI */}
             <Link href={`/obras/imprimir/${obra.id}`} className="bg-white border border-gray-300 shadow-sm px-4 py-2 rounded-lg font-bold text-gray-700 hover:bg-gray-50 text-sm">
               📄 Exportar PDF
             </Link>
@@ -266,6 +274,23 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
                 <input name="task" required placeholder="Nova tarefa..." className="flex-1 border border-gray-200 p-2 rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500" />
                 <button type="submit" className="bg-slate-900 text-white px-4 rounded-lg font-bold text-sm hover:bg-slate-800">Adicionar</button>
               </form>
+            </div>
+
+            {/* ANEXOS DA OBRA */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mt-6">
+              <h2 className="font-bold text-gray-900 mb-4">📎 Projetos e Arquivos</h2>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                {obra.attachments.map(arq => (
+                  <a key={arq.id} href={arq.fileUrl} target="_blank" rel="noopener noreferrer" className="bg-gray-50 border border-gray-200 p-3 rounded-lg text-center hover:shadow-md hover:border-blue-300 transition group flex flex-col justify-center items-center h-24">
+                    <div className="text-3xl mb-1 group-hover:scale-110 transition">📄</div>
+                    <p className="text-[10px] font-bold text-gray-600 truncate w-full px-1">{arq.fileName}</p>
+                  </a>
+                ))}
+                {obra.attachments.length === 0 && <p className="text-xs text-gray-400 italic col-span-full">Nenhum arquivo anexado a esta obra.</p>}
+              </div>
+
+              <UploadAnexo obraId={obra.id} salvarNoBanco={salvarAnexoBanco} />
             </div>
 
             {/* COMENTÁRIOS */}
