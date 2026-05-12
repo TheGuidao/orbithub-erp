@@ -4,7 +4,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import MenuNavegacao from "./components/MenuNavegacao"; // <-- Importamos o menu dinâmico
+import Link from "next/link"; // <-- Importamos o Link para a rota de fuga
+import MenuNavegacao from "./components/MenuNavegacao"; 
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -15,15 +16,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const nomeUsuario = cookieStore.get("usuario_nome")?.value;
   const roleUsuario = cookieStore.get("usuario_role")?.value; 
 
+  // LÓGICA DE FUGA: Define para onde o logo vai apontar dependendo de quem logou
+  const linkHome = roleUsuario === "INTERNO" ? "/" : "/obras";
+
   return (
     <html lang="pt-BR">
       <body className={`${inter.className} bg-slate-50 min-h-screen flex flex-col`}>
         {nomeUsuario && (
           <nav className="bg-slate-900 text-white p-4 shadow-md sticky top-0 z-40">
             <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
-              <div className="font-bold text-xl tracking-tight shrink-0">
+              
+              {/* O LOGO AGORA É UM BOTÃO CLICÁVEL! */}
+              <Link href={linkHome} className="font-bold text-xl tracking-tight shrink-0 hover:scale-105 transition-transform cursor-pointer">
                 Smart <span className="text-blue-500">Touch</span>
-              </div>
+              </Link>
               
               <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm font-medium">
                 {/* Aqui entra o componente que muda de cor sozinho */}
