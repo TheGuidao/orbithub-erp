@@ -1,7 +1,7 @@
 // src/app/obras/imprimir/[id]/page.tsx
 import { PrismaClient } from "@prisma/client";
 import Link from "next/link";
-import BotaoImprimir from "../../../../components/BotaoImprimir";
+import BotaoImprimir from "../../../components/BotaoImprimir";
 
 const prisma = new PrismaClient();
 
@@ -28,10 +28,7 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
   return (
     <div className="bg-gray-200 min-h-screen py-8 flex flex-col items-center">
       
-      {/* MÁGICA DO CSS DE IMPRESSÃO: 
-        Este código garante que o Menu global do sistema NÃO saia no PDF.
-        Ele esconde o 'body' inteiro, e mostra APENAS a div com id 'folha-a4'.
-      */}
+      {/* MÁGICA DO CSS DE IMPRESSÃO */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           body * {
@@ -52,7 +49,7 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
         }
       `}} />
 
-      {/* BARRA DE FERRAMENTAS - Posicionada em cima da folha de forma organizada */}
+      {/* BARRA DE FERRAMENTAS */}
       <div className="w-[210mm] flex justify-end gap-3 mb-4 print:hidden">
         <Link href={`/obras/detalhes/${obra.id}`} className="bg-slate-800 text-white px-5 py-2.5 rounded-lg font-bold shadow hover:bg-slate-700 transition flex items-center">
           ← Voltar
