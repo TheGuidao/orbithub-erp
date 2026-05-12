@@ -2,6 +2,7 @@
 import { PrismaClient } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
+import { cookies } from "next/headers"; // <-- MUDANÇA: IMPORT MOVIDO PARA O TOPO!
 import AssinaturaCard from "../../../components/AssinaturaCard";
 import UploadAnexo from "../../../components/UploadAnexo";
 
@@ -11,12 +12,11 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
   const params = await props.params;
   const id = parseInt(params.id);
 
-  import { cookies } from "next/headers"; // <-- Confirme se essa linha está lá em cima junto com os imports
-
   // --- PUXANDO A SESSÃO REAL DO USUÁRIO ---
   const cookieStore = await cookies();
   const cargoDoUsuario = cookieStore.get("usuario_role")?.value || "TECNICO";
   // ---------------------------------------------------------
+
   const obra = await prisma.serviceOrder.findUnique({
     where: { id },
     include: {
