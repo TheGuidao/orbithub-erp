@@ -188,9 +188,10 @@ export default async function DetalhesObraPage(props: { params: Promise<{ id: st
               </button>
             </form>
 
-            <button className="bg-white border border-gray-300 shadow-sm px-4 py-2 rounded-lg font-bold text-gray-700 hover:bg-gray-50 text-sm">
+            {/* BOTÃO EXPORTAR PDF ATUALIZADO AQUI */}
+            <Link href={`/obras/imprimir/${obra.id}`} className="bg-white border border-gray-300 shadow-sm px-4 py-2 rounded-lg font-bold text-gray-700 hover:bg-gray-50 text-sm">
               📄 Exportar PDF
-            </button>
+            </Link>
           </div>
         </div>
 
