@@ -14,9 +14,9 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
     orderBy: { createdAt: 'desc' }
   });
 
-  // Puxa o catálogo de equipamentos para a gente poder selecionar se for do nosso estoque
+  // Puxa o catálogo de equipamentos (Tudo) para o Datalist
   const estoque = await prisma.material.findMany({
-    where: { category: { notIn: ["Insumos", "Ferramentas"] }, currentStock: { gt: 0 } },
+    where: { currentStock: { gt: 0 } },
     orderBy: { name: 'asc' }
   });
 
@@ -24,46 +24,52 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
 
   async function registrarRma(formData: FormData) {
     "use server";
-    const materialIdString = formData.get("materialId") as string; // Select do nosso estoque
+    const materialIdString = formData.get("materialId") as string; // Input pesquisável
     const externalName = formData.get("externalName") as string;   // Input de cliente antigo
     const serialNumber = formData.get("serialNumber") as string;
     const problemDetected = formData.get("problemDetected") as string;
 
-    // Se selecionou um material da lista (É DO NOSSO ESTOQUE)
-    if (materialIdString) {
-      const materialId = parseInt(materialIdString);
-      const material = await prisma.material.findUnique({ where: { id: materialId } });
+    // A mágica do Datalist: o valor que vem no formData será algo como: "123 - Roteador X"
+    // Nós quebramos a string no "-" para pegar só o ID.
+    const hasInternalMaterial = materialIdString && materialIdString.includes(" - ");
+    
+    if (hasInternalMaterial) {
+      const extractedId = parseInt(materialIdString.split(" - ")[0]);
       
-      if (material) {
-        // 1. Cria o registro de RMA
-        await prisma.rmaEquipment.create({
-          data: {
-            equipmentName: material.name,
-            serialNumber,
-            problemDetected,
-            isFromStock: true,
-            materialId: material.id,
-          }
-        });
+      if (!isNaN(extractedId)) {
+        const material = await prisma.material.findUnique({ where: { id: extractedId } });
         
-        // 2. Subtrai 1 do estoque principal
-        await prisma.material.update({
-          where: { id: material.id },
-          data: { currentStock: material.currentStock - 1 }
-        });
+        if (material) {
+          // 1. Cria o registro de RMA
+          await prisma.rmaEquipment.create({
+            data: {
+              equipmentName: material.name,
+              serialNumber,
+              problemDetected,
+              isFromStock: true,
+              materialId: material.id,
+            }
+          });
+          
+          // 2. Subtrai 1 do estoque principal
+          await prisma.material.update({
+            where: { id: material.id },
+            data: { currentStock: material.currentStock - 1 }
+          });
 
-        // 3. Registra a transação de saída
-        await prisma.transaction.create({
-          data: {
-            materialId: material.id,
-            type: 'SAIDA',
-            quantity: 1,
-            notes: `Enviado para Manutenção/Garantia (RMA). SN: ${serialNumber}`
-          }
-        });
+          // 3. Registra a transação de saída
+          await prisma.transaction.create({
+            data: {
+              materialId: material.id,
+              type: 'SAIDA',
+              quantity: 1,
+              notes: `Enviado para Manutenção/Garantia (RMA). SN: ${serialNumber}`
+            }
+          });
+        }
       }
     } else if (externalName) {
-      // Se não selecionou do estoque, é EQUIPAMENTO EXTERNO (Não mexe no catálogo)
+      // Se não preencheu o campo interno, cai aqui pro Externo
       await prisma.rmaEquipment.create({
         data: {
           equipmentName: externalName,
@@ -119,6 +125,13 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
 
   return (
     <div>
+      {/* DATALIST - Fica invisível, serve só como base de dados para o input inteligente */}
+      <datalist id="lista-estoque">
+        {estoque.map(m => (
+          <option key={m.id} value={`${m.id} - ${m.name} ${m.brand ? `[${m.brand}]` : ''}`} />
+        ))}
+      </datalist>
+
       {/* FORMULÁRIO DE NOVO RMA */}
       <form action={registrarRma} className="bg-red-50/50 p-6 rounded-xl shadow-sm border border-red-200 mb-8">
         <div className="flex items-center gap-2 mb-4">
@@ -127,16 +140,16 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-          {/* OPÇÃO 1: Do nosso estoque */}
+          {/* OPÇÃO 1: Do nosso estoque (AGORA COM BUSCA INTELIGENTE) */}
           <div className="bg-white p-4 rounded-lg border border-gray-200">
             <label className="block text-xs font-bold text-blue-700 uppercase mb-2">1. Veio do nosso estoque?</label>
-            <select name="materialId" className="w-full border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">-- Não (Equipamento de Cliente) --</option>
-              {estoque.map(m => (
-                <option key={m.id} value={m.id}>{m.name} (Saldo Atual: {m.currentStock})</option>
-              ))}
-            </select>
-            <p className="text-[10px] text-gray-500 mt-1">Se selecionado, o sistema vai subtrair 1 unidade do estoque automaticamente.</p>
+            <input 
+              list="lista-estoque" 
+              name="materialId" 
+              placeholder="Digite para pesquisar no estoque..." 
+              className="w-full border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-[10px] text-gray-500 mt-1">Selecione na lista para subtrair 1 unidade do estoque automaticamente.</p>
           </div>
 
           {/* OPÇÃO 2: Externo */}

@@ -32,6 +32,7 @@ model Material {
   id           Int           @id @default(autoincrement())
   name         String
   category     String
+  brand        String?       // NOVO: Marca do Equipamento/Insumo
   minStock     Int           @default(5)
   currentStock Int           @default(0)
   transactions Transaction[]

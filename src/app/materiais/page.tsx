@@ -24,7 +24,8 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
   if (busca) {
     whereClause.OR = [
       { name: { contains: busca, mode: 'insensitive' } },
-      { category: { contains: busca, mode: 'insensitive' } }
+      { category: { contains: busca, mode: 'insensitive' } },
+      { brand: { contains: busca, mode: 'insensitive' } } // NOVO: Busca por Marca
     ];
   }
   if (categoria) {
@@ -68,17 +69,18 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
     const id = formData.get("id") ? parseInt(formData.get("id") as string) : null;
     const name = formData.get("name") as string;
     const category = formData.get("category") as string;
+    const brand = formData.get("brand") as string; // NOVO: Captura a Marca
     const minStock = parseInt(formData.get("minStock") as string);
     const currentStock = parseInt(formData.get("currentStock") as string);
 
     if (id) {
       await prisma.material.update({
         where: { id },
-        data: { name, category, minStock, currentStock }
+        data: { name, category, brand, minStock, currentStock }
       });
     } else {
       await prisma.material.create({
-        data: { name, category, minStock, currentStock }
+        data: { name, category, brand, minStock, currentStock }
       });
     }
 
@@ -138,12 +140,20 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
         
         {materialToEdit && <input type="hidden" name="id" value={materialToEdit.id} />}
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+        {/* MUDANÇA: O grid agora é cols-6 para acomodar o campo Marca */}
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
           <div className="md:col-span-2">
             <label className="block text-xs font-semibold text-gray-600 mb-1">Nome do Equipamento</label>
-            <input type="text" name="name" defaultValue={materialToEdit?.name || ""} required placeholder="Ex: Roteador WiFi 6 Ubiquiti" className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="text" name="name" defaultValue={materialToEdit?.name || ""} required placeholder="Ex: Roteador WiFi 6" className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
+          
+          {/* NOVO CAMPO DE MARCA */}
           <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Marca / Fabricante</label>
+            <input type="text" name="brand" defaultValue={materialToEdit?.brand || ""} placeholder="Ex: Ubiquiti" className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+
+          <div className="md:col-span-1">
             <label className="block text-xs font-semibold text-gray-600 mb-1">Categoria</label>
             <select name="category" defaultValue={materialToEdit?.category || ""} required className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white">
               <option value="" disabled>Selecione...</option>
@@ -158,7 +168,7 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
             <label className="block text-xs font-semibold text-gray-600 mb-1">Alerta (Mínimo)</label>
             <input type="number" name="minStock" defaultValue={materialToEdit?.minStock ?? ""} required min="0" placeholder="Avisar em..." className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <button type="submit" className={`md:col-span-5 w-full text-white font-bold p-2 rounded-lg mt-2 transition shadow-sm ${materialToEdit ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
+          <button type="submit" className={`md:col-span-6 w-full text-white font-bold p-2 rounded-lg mt-2 transition shadow-sm ${materialToEdit ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
             {materialToEdit ? 'Salvar Alterações' : 'Cadastrar Equipamento'}
           </button>
         </div>
@@ -167,7 +177,7 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
       <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6 bg-gray-50/50">
         <form method="GET" className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
-            <input type="text" name="busca" defaultValue={busca} placeholder="Pesquisar equipamento..." className="w-full border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="text" name="busca" defaultValue={busca} placeholder="Pesquisar por nome ou marca..." className="w-full border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div className="w-full sm:w-64">
             <select name="categoria" defaultValue={categoria} className="w-full border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
@@ -205,7 +215,10 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
                 const emAlerta = m.currentStock <= m.minStock;
                 return (
                   <tr key={m.id} className={`hover:bg-gray-50 ${emAlerta && mostrarSomenteCriticos ? 'bg-red-50/30' : ''}`}>
-                    <td className="px-6 py-4 font-bold text-gray-900">{m.name}</td>
+                    <td className="px-6 py-4">
+                      <p className="font-bold text-gray-900">{m.name}</p>
+                      {m.brand && <p className="text-[10px] text-gray-500 font-semibold uppercase">{m.brand}</p>}
+                    </td>
                     <td className="px-6 py-4 text-gray-600">
                       <span className="bg-slate-100 px-2 py-1 rounded text-xs font-medium text-slate-700 border border-slate-200">
                         {m.category}
