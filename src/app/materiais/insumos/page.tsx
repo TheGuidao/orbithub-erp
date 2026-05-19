@@ -149,3 +149,40 @@ export default async function InsumosPage(props: { searchParams: Promise<{ criti
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Insumo/Ferramenta</th>
+              <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Subcategoria</th>
+              <th className="px-6 py-3 text-center font-medium text-gray-500 uppercase">Estoque</th>
+              <th className="px-6 py-3 text-center font-medium text-gray-500 uppercase">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {materiais.length === 0 ? (
+              <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">Nenhum item encontrado.</td></tr>
+            ) : (
+              materiais.map((m) => {
+                const emAlerta = m.currentStock <= m.minStock;
+                return (
+                  <tr key={m.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 font-bold text-gray-900">{m.name}</td>
+                    <td className="px-6 py-4 text-gray-600"><span className="bg-slate-100 px-2 py-1 rounded text-xs font-medium text-slate-700 border border-slate-200">{m.category}</span></td>
+                    <td className={`px-6 py-4 text-center font-bold text-lg ${emAlerta ? 'text-red-600' : 'text-gray-900'}`}>
+                      {m.currentStock} <span className="text-xs text-gray-400 font-normal">/ min: {m.minStock}</span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex justify-center gap-2">
+                        <Link href={`/materiais/insumos?edit=${m.id}`} className="text-blue-600 font-bold text-xs bg-blue-50 px-3 py-1.5 rounded border border-blue-100 hover:bg-blue-100 transition">Editar</Link>
+                        <form action={deletarMaterial}>
+                          <input type="hidden" name="id" value={m.id} />
+                          <button type="submit" className="text-red-500 hover:text-red-700 font-bold text-xs bg-red-50 px-3 py-1.5 rounded border border-red-100 transition hover:bg-red-100">Excluir</button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
