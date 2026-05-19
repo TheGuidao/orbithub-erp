@@ -16,9 +16,12 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
   const editId = searchParams?.edit ? parseInt(searchParams.edit) : null;
   const materialToEdit = editId ? await prisma.material.findUnique({ where: { id: editId } }) : null;
 
-  const whereClause: any = {};
+  // Filtra tudo, MENOS Insumos e Ferramentas (Que vão para a aba 2)
+  const whereClause: any = {
+    category: { notIn: ["Insumos", "Ferramentas"] }
+  };
+
   if (busca) {
-    // AQUI ESTÁ A CORREÇÃO: mode: 'insensitive' adicionado ao nome e categoria
     whereClause.OR = [
       { name: { contains: busca, mode: 'insensitive' } },
       { category: { contains: busca, mode: 'insensitive' } }
@@ -56,10 +59,6 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
         <option value="Rede - Equipamentos">Equipamentos de Rede</option>
         <option value="Infra - Montagem de Quadros">Montagem de Quadros</option>
         <option value="Infra - Cabeamento">Cabeamento</option>
-      </optgroup>
-      <optgroup label="Diversos">
-        <option value="Ferramentas">Ferramentas</option>
-        <option value="Insumos">Insumos</option>
       </optgroup>
     </>
   );
@@ -104,22 +103,19 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
   }
 
   return (
-    <div className="p-4 md:p-8">
-      <header className="mb-8 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Catálogo de Materiais</h1>
-          <p className="text-gray-500 mt-1">Cadastre, pesquise e edite os materiais do estoque.</p>
-        </div>
-        {materialToEdit && (
+    <div>
+      {/* CANCELAR EDIÇÃO */}
+      {materialToEdit && (
+        <div className="flex justify-end mb-4">
           <Link href="/materiais" className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium text-sm hover:bg-gray-300 transition">
             Cancelar Edição
           </Link>
-        )}
-      </header>
+        </div>
+      )}
 
       {erroURL === "em_uso" && (
         <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg mb-6 border border-red-200 font-medium">
-          ⚠️ <strong>Operação Negada:</strong> Você não pode excluir um material que já possui histórico de retiradas. Clique em "Editar" e deixe o saldo dele como zero em vez de excluir.
+          ⚠️ <strong>Operação Negada:</strong> Você não pode excluir um equipamento que já possui histórico de retiradas. Clique em "Editar" e deixe o saldo dele como zero em vez de excluir.
         </div>
       )}
 
@@ -137,14 +133,14 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
 
       <form action={salvarMaterial} className={`p-6 rounded-xl shadow-sm border mb-8 transition-all ${materialToEdit ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'}`}>
         <h2 className={`text-xl font-bold mb-4 ${materialToEdit ? 'text-blue-800' : 'text-gray-900'}`}>
-          {materialToEdit ? `Editando: ${materialToEdit.name}` : 'Cadastrar Novo Item'}
+          {materialToEdit ? `Editando: ${materialToEdit.name}` : 'Cadastrar Novo Equipamento'}
         </h2>
         
         {materialToEdit && <input type="hidden" name="id" value={materialToEdit.id} />}
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
           <div className="md:col-span-2">
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Nome do Item / Equipamento</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Nome do Equipamento</label>
             <input type="text" name="name" defaultValue={materialToEdit?.name || ""} required placeholder="Ex: Roteador WiFi 6 Ubiquiti" className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
@@ -163,7 +159,7 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
             <input type="number" name="minStock" defaultValue={materialToEdit?.minStock ?? ""} required min="0" placeholder="Avisar em..." className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <button type="submit" className={`md:col-span-5 w-full text-white font-bold p-2 rounded-lg mt-2 transition shadow-sm ${materialToEdit ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
-            {materialToEdit ? 'Salvar Alterações' : 'Cadastrar Item'}
+            {materialToEdit ? 'Salvar Alterações' : 'Cadastrar Equipamento'}
           </button>
         </div>
       </form>
@@ -171,7 +167,7 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
       <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6 bg-gray-50/50">
         <form method="GET" className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
-            <input type="text" name="busca" defaultValue={busca} placeholder="Pesquisar por nome ou categoria do material..." className="w-full border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="text" name="busca" defaultValue={busca} placeholder="Pesquisar equipamento..." className="w-full border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div className="w-full sm:w-64">
             <select name="categoria" defaultValue={categoria} className="w-full border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
@@ -194,7 +190,7 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Item</th>
+              <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipamento</th>
               <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Subcategoria</th>
               <th className="px-6 py-3 text-center font-medium text-gray-500 uppercase">Estoque</th>
               <th className="px-6 py-3 text-center font-medium text-gray-500 uppercase">Status</th>
@@ -203,7 +199,7 @@ export default async function MateriaisPage(props: { searchParams: Promise<{ cri
           </thead>
           <tbody className="divide-y divide-gray-200">
             {materiais.length === 0 ? (
-              <tr><td colSpan={5} className="px-6 py-10 text-center text-gray-500">Nenhum item encontrado.</td></tr>
+              <tr><td colSpan={5} className="px-6 py-10 text-center text-gray-500">Nenhum equipamento encontrado.</td></tr>
             ) : (
               materiais.map((m) => {
                 const emAlerta = m.currentStock <= m.minStock;

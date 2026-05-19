@@ -99,6 +99,22 @@ model VehicleMaintenance {
 }
 
 // ==========================================
+// NOVO MÓDULO: RMA (Retorno de Mercadoria)
+// ==========================================
+
+model RmaEquipment {
+  id              Int      @id @default(autoincrement())
+  equipmentName   String   // Nome do equipamento
+  serialNumber    String?  // Número de série (opcional)
+  problemDetected String   // Problema relatado
+  status          String   @default("EM_ANALISE") // EM_ANALISE, RESOLVIDO, DESCARTADO
+  isFromStock     Boolean  @default(false) // Veio do nosso estoque?
+  materialId      Int?     // Se veio do estoque, linka com o material
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ==========================================
 // NOVO MÓDULO: OBRAS E AGENDAS (KANBAN)
 // ==========================================
 

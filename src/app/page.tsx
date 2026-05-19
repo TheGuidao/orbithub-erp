@@ -23,10 +23,12 @@ export default async function DashboardPage() {
   const primeiroDiaMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
 
   // 2. Busca simultânea de todos os dados cruciais (Performance máxima)
-  const [todasObras, materiais, veiculos] = await Promise.all([
+  // ADICIONADO: Busca dos equipamentos em RMA
+  const [todasObras, materiais, veiculos, rmasAtivos] = await Promise.all([
     prisma.serviceOrder.findMany({ include: { team: true }, orderBy: { date: 'asc' } }),
     prisma.material.findMany({ orderBy: { name: 'asc' } }),
-    prisma.vehicle.findMany()
+    prisma.vehicle.findMany(),
+    prisma.rmaEquipment.findMany({ where: { status: 'EM_ANALISE' } })
   ]);
 
   // 3. Filtrando os dados para o Dashboard
@@ -54,8 +56,8 @@ export default async function DashboardPage() {
           </div>
         </header>
 
-        {/* CARDS DE MÉTRICAS RÁPIDAS (KPIs) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* CARDS DE MÉTRICAS RÁPIDAS (KPIs) - AGORA SÃO 5 CARDS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-blue-500 flex flex-col justify-between hover:shadow-md transition">
             <div className="flex justify-between items-start">
               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Obras Hoje</h3>
@@ -66,16 +68,30 @@ export default async function DashboardPage() {
               <p className="text-xs text-blue-600 font-bold mt-1">Agendadas para hoje</p>
             </div>
           </div>
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-red-500 flex flex-col justify-between hover:shadow-md transition">
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-orange-500 flex flex-col justify-between hover:shadow-md transition">
             <div className="flex justify-between items-start">
-              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Alerta de Estoque</h3>
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Alerta Estoque</h3>
               <span className="text-2xl">⚠️</span>
             </div>
             <div className="mt-4">
               <p className="text-4xl font-black text-slate-800">{alertasEstoque.length}</p>
-              <p className="text-xs text-red-500 font-bold mt-1">Itens no limite mínimo</p>
+              <p className="text-xs text-orange-600 font-bold mt-1">Itens no limite mínimo</p>
             </div>
           </div>
+
+          {/* NOVO CARD: RMA */}
+          <Link href="/materiais/rma" className="bg-red-50 p-6 rounded-2xl shadow-sm border border-red-200 border-l-4 border-l-red-600 flex flex-col justify-between hover:bg-red-100 hover:shadow-md transition cursor-pointer group">
+            <div className="flex justify-between items-start">
+              <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider group-hover:underline">Em Garantia / RMA</h3>
+              <span className="text-2xl">🛠️</span>
+            </div>
+            <div className="mt-4">
+              <p className="text-4xl font-black text-red-900">{rmasAtivos.length}</p>
+              <p className="text-xs text-red-600 font-bold mt-1">Equip. em Manutenção</p>
+            </div>
+          </Link>
+
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-yellow-500 flex flex-col justify-between hover:shadow-md transition">
             <div className="flex justify-between items-start">
               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Em Andamento</h3>
@@ -83,12 +99,13 @@ export default async function DashboardPage() {
             </div>
             <div className="mt-4">
               <p className="text-4xl font-black text-slate-800">{obrasPendentes.length}</p>
-              <p className="text-xs text-yellow-600 font-bold mt-1">Serviços ativos no quadro</p>
+              <p className="text-xs text-yellow-600 font-bold mt-1">Serviços ativos</p>
             </div>
           </div>
+
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-green-500 flex flex-col justify-between hover:shadow-md transition">
             <div className="flex justify-between items-start">
-              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Concluídas no Mês</h3>
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Concluídas Mês</h3>
               <span className="text-2xl">✅</span>
             </div>
             <div className="mt-4">
@@ -140,9 +157,9 @@ export default async function DashboardPage() {
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[400px]">
-            <div className="p-5 border-b border-slate-100 bg-red-50/30 flex justify-between items-center">
+            <div className="p-5 border-b border-slate-100 bg-orange-50 flex justify-between items-center">
               <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                <span className="text-red-500">🔴</span> Precisam de Reposição
+                <span className="text-orange-500">🔴</span> Precisam de Reposição
               </h2>
               <Link href="/materiais" className="text-xs font-bold text-blue-600 hover:text-blue-800">Ver Estoque ➔</Link>
             </div>
