@@ -8,9 +8,14 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
   const searchParams = await props.searchParams;
   const busca = searchParams?.busca || '';
 
-  // Busca os RMA's filtrando pelo nome do equipamento (ignorando maiúsculas/minúsculas)
+  // Busca os RMA's filtrando pelo nome do equipamento ou cliente (ignorando maiúsculas/minúsculas)
   const rmas = await prisma.rmaEquipment.findMany({
-    where: busca ? { equipmentName: { contains: busca, mode: 'insensitive' } } : {},
+    where: busca ? {
+      OR: [
+        { equipmentName: { contains: busca, mode: 'insensitive' } },
+        { clientName: { contains: busca, mode: 'insensitive' } }
+      ]
+    } : {},
     orderBy: { createdAt: 'desc' }
   });
 
@@ -26,6 +31,7 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
     "use server";
     const materialIdString = formData.get("materialId") as string; // Input pesquisável
     const externalName = formData.get("externalName") as string;   // Input de cliente antigo
+    const clientName = formData.get("clientName") as string;       // NOVO: Nome do Cliente
     const serialNumber = formData.get("serialNumber") as string;
     const problemDetected = formData.get("problemDetected") as string;
 
@@ -44,6 +50,7 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
           await prisma.rmaEquipment.create({
             data: {
               equipmentName: material.name,
+              clientName, // Salva o nome do cliente
               serialNumber,
               problemDetected,
               isFromStock: true,
@@ -63,7 +70,7 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
               materialId: material.id,
               type: 'SAIDA',
               quantity: 1,
-              notes: `Enviado para Manutenção/Garantia (RMA). SN: ${serialNumber}`
+              notes: `Enviado para RMA (Cliente: ${clientName || 'N/A'}). SN: ${serialNumber || 'N/A'}`
             }
           });
         }
@@ -73,6 +80,7 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
       await prisma.rmaEquipment.create({
         data: {
           equipmentName: externalName,
+          clientName, // Salva o nome do cliente
           serialNumber,
           problemDetected,
           isFromStock: false,
@@ -112,7 +120,7 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
             materialId: rma.materialId,
             type: 'ENTRADA',
             quantity: 1,
-            notes: `Retorno de Manutenção/Garantia Resolvido. SN: ${rma.serialNumber || 'N/A'}`
+            notes: `Retorno de RMA Resolvido (Cliente: ${rma.clientName || 'N/A'}). SN: ${rma.serialNumber || 'N/A'}`
           }
         });
       }
@@ -140,7 +148,7 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-          {/* OPÇÃO 1: Do nosso estoque (AGORA COM BUSCA INTELIGENTE) */}
+          {/* OPÇÃO 1: Do nosso estoque */}
           <div className="bg-white p-4 rounded-lg border border-gray-200">
             <label className="block text-xs font-bold text-blue-700 uppercase mb-2">1. Veio do nosso estoque?</label>
             <input 
@@ -155,16 +163,23 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
           {/* OPÇÃO 2: Externo */}
           <div className="bg-white p-4 rounded-lg border border-gray-200">
             <label className="block text-xs font-bold text-gray-500 uppercase mb-2">OU 2. Digite o Nome (Se for Externo)</label>
-            <input type="text" name="externalName" placeholder="Ex: Central Antiga do Cliente João" className="w-full border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="text" name="externalName" placeholder="Ex: Central Antiga" className="w-full border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
             <p className="text-[10px] text-gray-500 mt-1">Use apenas se o item não fizer parte do seu catálogo atual de estoque.</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
+          {/* NOVO CAMPO: NOME DO CLIENTE */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Nome do Cliente (Opcional)</label>
+            <input type="text" name="clientName" placeholder="Ex: João Silva" className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-red-500" />
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">Nº de Série (Opcional)</label>
             <input type="text" name="serialNumber" placeholder="S/N..." className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-red-500" />
           </div>
+
           <div className="md:col-span-2 flex gap-4 items-end">
             <div className="flex-1">
               <label className="block text-xs font-semibold text-gray-700 mb-1">Problema Detectado</label>
@@ -180,7 +195,7 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
       {/* BARRA DE PESQUISA */}
       <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6 flex gap-4">
         <form method="GET" className="flex flex-1 gap-4">
-          <input type="text" name="busca" defaultValue={busca} placeholder="Pesquisar RMA por nome do equipamento..." className="flex-1 border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" name="busca" defaultValue={busca} placeholder="Pesquisar RMA por equipamento ou cliente..." className="flex-1 border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
           <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition">Pesquisar</button>
           {busca && <a href="/materiais/rma" className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 flex items-center">Limpar</a>}
         </form>
@@ -210,6 +225,8 @@ export default async function RmaPage(props: { searchParams: Promise<{ busca?: s
                   )}
                 </div>
                 <div className="text-sm text-gray-600 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1 mt-2">
+                  {/* NOVO CAMPO: EXIBINDO O CLIENTE */}
+                  <p><span className="font-semibold text-gray-400">Cliente:</span> <span className="font-medium text-gray-800">{rma.clientName || 'Não informado'}</span></p>
                   <p><span className="font-semibold text-gray-400">S/N:</span> {rma.serialNumber || 'Não informado'}</p>
                   <p><span className="font-semibold text-gray-400">Data:</span> {new Date(rma.createdAt).toLocaleDateString('pt-BR')}</p>
                   <p className="sm:col-span-2"><span className="font-semibold text-gray-400">Defeito:</span> <span className="text-red-600">{rma.problemDetected}</span></p>
