@@ -106,6 +106,7 @@ model VehicleMaintenance {
 model RmaEquipment {
   id              Int      @id @default(autoincrement())
   equipmentName   String   // Nome do equipamento
+  clientName      String?  // NOVO: Nome do Cliente
   serialNumber    String?  // Número de série (opcional)
   problemDetected String   // Problema relatado
   status          String   @default("EM_ANALISE") // EM_ANALISE, RESOLVIDO, DESCARTADO
