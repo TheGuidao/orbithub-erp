@@ -49,6 +49,7 @@ model Transaction {
   quantity        Int
   relatedOutbound Int?
   notes           String?   
+  clientName      String?   // NOVO: Nome do Cliente atrelado a movimentacao (opcional)
   assinatura      Boolean   @default(false) 
   signatureData   String?   
   createdAt       DateTime  @default(now())

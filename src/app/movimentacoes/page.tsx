@@ -7,10 +7,11 @@ import BotaoExportar from "../components/BotaoExportar";
 
 const prisma = new PrismaClient();
 
-export default async function MovimentacoesPage(props: { searchParams: Promise<{ error?: string, viewAssinatura?: string }> }) {
+export default async function MovimentacoesPage(props: { searchParams: Promise<{ error?: string, viewAssinatura?: string, busca?: string }> }) {
   const searchParams = await props.searchParams;
   const erroURL = searchParams?.error;
   const modalAssinaturaId = searchParams?.viewAssinatura ? parseInt(searchParams.viewAssinatura) : null;
+  const busca = searchParams?.busca || ''; // NOVO: Captura a busca da URL
 
   const materiais = await prisma.material.findMany({ orderBy: { name: 'asc' } });
   
@@ -19,7 +20,15 @@ export default async function MovimentacoesPage(props: { searchParams: Promise<{
     orderBy: { name: 'asc' } 
   });
 
+  // NOVO: Histórico agora filtra por material, cliente ou nome do técnico
   const historico = await prisma.transaction.findMany({
+    where: busca ? {
+      OR: [
+        { material: { name: { contains: busca, mode: 'insensitive' } } },
+        { clientName: { contains: busca, mode: 'insensitive' } },
+        { user: { name: { contains: busca, mode: 'insensitive' } } }
+      ]
+    } : {},
     orderBy: { createdAt: 'desc' },
     include: { material: true, user: true },
     take: 1000 
@@ -33,12 +42,14 @@ export default async function MovimentacoesPage(props: { searchParams: Promise<{
     });
   }
 
+  // NOVO: Adicionada a coluna "Cliente" na exportação do Excel
   const dadosParaPlanilha = historico.map(h => ({
     "Data": new Date(h.createdAt).toLocaleString('pt-BR'),
     "Material": h.material.name,
     "Tipo de Movimento": h.type === 'SAIDA' ? 'Retirada' : (h.type === 'RETORNO' ? 'Devolução' : 'Compra (Entrada)'),
     "Quantidade": h.quantity,
     "Técnico / Responsável": h.user ? h.user.name : 'Geral / Compra',
+    "Cliente": h.clientName || 'N/A',
     "Status da Assinatura": h.type === 'SAIDA' ? (h.assinatura ? 'Assinado' : 'Pendente') : 'N/A',
     "Observações": h.notes || ""
   }));
@@ -46,7 +57,6 @@ export default async function MovimentacoesPage(props: { searchParams: Promise<{
   async function registrarMovimentacao(formData: FormData) {
     "use server";
     
-    // Extraindo o ID do material a partir do texto do Datalist
     const materialInput = formData.get("materialInput") as string;
     const idMatch = materialInput.match(/\[ID:\s*(\d+)\]/);
     
@@ -59,6 +69,7 @@ export default async function MovimentacoesPage(props: { searchParams: Promise<{
     const quantity = parseInt(formData.get("quantity") as string);
     const userIdString = formData.get("userId") as string;
     const notes = formData.get("notes") as string;
+    const clientName = formData.get("clientName") as string; // NOVO: Captura nome do cliente
     
     let userId = userIdString ? parseInt(userIdString) : null;
 
@@ -94,8 +105,9 @@ export default async function MovimentacoesPage(props: { searchParams: Promise<{
       }
     }
 
+    // NOVO: Adicionado clientName na criação da transação
     await prisma.transaction.create({
-      data: { materialId, type, quantity, userId, notes }
+      data: { materialId, type, quantity, userId, notes, clientName }
     });
 
     const novoSaldo = (type === 'SAIDA') 
@@ -201,19 +213,36 @@ export default async function MovimentacoesPage(props: { searchParams: Promise<{
               ))}
             </select>
           </div>
-          <div className="md:col-span-4">
+          
+          {/* NOVA LINHA DE CAMPOS */}
+          <div className="md:col-span-2">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Nome do Cliente (Opcional)</label>
+            <input type="text" name="clientName" placeholder="Ex: Casa do Sr. João..." className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="md:col-span-2">
             <label className="block text-xs font-semibold text-gray-600 mb-1">Observações (Opcional)</label>
             <input type="text" name="notes" placeholder="Motivo da retirada, NF da compra, etc..." className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <button type="submit" className="w-full bg-slate-900 text-white font-bold p-2 rounded-lg mt-2 hover:bg-slate-800 transition">
-            Registrar
-          </button>
+          <div className="md:col-span-1">
+            <button type="submit" className="w-full bg-slate-900 text-white font-bold p-2 rounded-lg mt-2 hover:bg-slate-800 transition">
+              Registrar
+            </button>
+          </div>
         </div>
       </form>
 
-      <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6 flex justify-between items-center bg-gray-50/50">
-        <h2 className="text-lg font-bold text-gray-700">Histórico de Movimentações</h2>
-        <BotaoExportar dados={dadosParaPlanilha} nomeArquivo="Relatorio_Estoque" />
+      {/* NOVA BARRA DE PESQUISA INTEGRADA AO CABEÇALHO DA TABELA */}
+      <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50">
+        <h2 className="text-lg font-bold text-gray-700 shrink-0">Histórico de Movimentações</h2>
+        
+        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+          <form method="GET" className="flex flex-1 sm:flex-none gap-2">
+            <input type="text" name="busca" defaultValue={busca} placeholder="Buscar cliente, material..." className="w-full sm:w-64 border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition">Pesquisar</button>
+            {busca && <Link href="/movimentacoes" className="bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 flex items-center">Limpar</Link>}
+          </form>
+          <BotaoExportar dados={dadosParaPlanilha} nomeArquivo="Relatorio_Estoque" />
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -224,12 +253,12 @@ export default async function MovimentacoesPage(props: { searchParams: Promise<{
               <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Material</th>
               <th className="px-6 py-3 text-center font-medium text-gray-500 uppercase">Ação</th>
               <th className="px-6 py-3 text-center font-medium text-gray-500 uppercase">Qtd</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Responsável</th>
+              <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Responsável / Cliente</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {historico.length === 0 ? (
-              <tr><td colSpan={5} className="px-6 py-10 text-center text-gray-500">Nenhuma movimentação registrada.</td></tr>
+              <tr><td colSpan={5} className="px-6 py-10 text-center text-gray-500">Nenhuma movimentação encontrada.</td></tr>
             ) : (
               historico.map((h) => (
                 <tr key={h.id} className="hover:bg-gray-50">
@@ -246,25 +275,34 @@ export default async function MovimentacoesPage(props: { searchParams: Promise<{
                   </td>
                   <td className="px-6 py-4 text-center font-bold text-gray-900">{h.quantity}</td>
                   <td className="px-6 py-4 text-gray-600">
-                    <div className="flex items-center gap-2">
-                      {h.user ? h.user.name : <span className="text-gray-400 italic">Geral / Compra</span>}
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-800">{h.user ? h.user.name : <span className="text-gray-400 italic">Geral / Compra</span>}</span>
+                        {h.type === 'SAIDA' && h.user && (
+                          h.assinatura ? (
+                            <Link 
+                              href={`/movimentacoes?viewAssinatura=${h.id}`} 
+                              className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-green-100 text-green-700 hover:bg-green-200 transition cursor-pointer flex items-center gap-1"
+                            >
+                              ✅ Assinado (Ver)
+                            </Link>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-yellow-100 text-yellow-700 border border-yellow-300">
+                              ⏳ Pendente
+                            </span>
+                          )
+                        )}
+                      </div>
                       
-                      {h.type === 'SAIDA' && h.user && (
-                        h.assinatura ? (
-                          <Link 
-                            href={`/movimentacoes?viewAssinatura=${h.id}`} 
-                            className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-green-100 text-green-700 hover:bg-green-200 transition cursor-pointer flex items-center gap-1"
-                          >
-                            ✅ Assinado (Ver)
-                          </Link>
-                        ) : (
-                          <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-yellow-100 text-yellow-700 border border-yellow-300">
-                            ⏳ Pendente
-                          </span>
-                        )
+                      {/* NOVO: Exibe o nome do cliente em destaque */}
+                      {h.clientName && (
+                        <p className="text-[10px] bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded w-fit font-semibold uppercase mt-1">
+                          👤 Cliente: {h.clientName}
+                        </p>
                       )}
+                      
+                      {h.notes && <p className="text-xs text-gray-400 mt-1 border-t pt-1 border-gray-100">{h.notes}</p>}
                     </div>
-                    {h.notes && <p className="text-xs text-gray-400 mt-1 border-t pt-1 border-gray-100">{h.notes}</p>}
                   </td>
                 </tr>
               ))
