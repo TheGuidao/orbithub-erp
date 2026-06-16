@@ -19,8 +19,8 @@ export default function MenuNavegacao({ roleUsuario, nomeUsuario }: { roleUsuari
       <>
         <Link href="/" className={`${baseClass} ${isActive('/') ? activeClass : inactiveClass}`}>Painel</Link>
         
-        {/* NOVA ABA ADICIONADA AQUI */}
-        <Link href="/obras" className={`${baseClass} ${isActive('/obras') ? activeClass : inactiveClass}`}>Obras e Agendas</Link>
+        {/* NOME ATUALIZADO PARA O FORMATO UNIVERSAL (SAAS) */}
+        <Link href="/obras" className={`${baseClass} ${isActive('/obras') ? activeClass : inactiveClass}`}>Serviços e Agendas</Link>
         
         <Link href="/materiais" className={`${baseClass} ${isActive('/materiais') ? activeClass : inactiveClass}`}>Catálogo</Link>
         <Link href="/movimentacoes" className={`${baseClass} ${isActive('/movimentacoes') ? activeClass : inactiveClass}`}>Movimentações</Link>

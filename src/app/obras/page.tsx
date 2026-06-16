@@ -31,9 +31,7 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
     filtroData = dataAtual;
   }
 
-  // LÓGICA DE VISIBILIDADE:
-  // Se for "INTERNO", vê todas as obras.
-  // Se for "TECNICO", vê SÓ as obras onde ele foi alocado pela equipe interna.
+  // LÓGICA DE VISIBILIDADE
   const whereClause: any = {};
   if (cargoDoUsuario === "TECNICO" && userId) {
     whereClause.team = {
@@ -43,14 +41,14 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
     };
   }
 
-  // Busca as obras no banco aplicando as regras de visibilidade
+  // Busca as ordens no banco
   let obras = await prisma.serviceOrder.findMany({
     where: whereClause,
     include: { team: true },
     orderBy: { date: 'asc' }
   });
 
-  // Aplica o filtro de Data (Agenda) se houver
+  // Aplica o filtro de Data
   if (filtroData) {
     obras = obras.filter(o => {
       if (!o.date) return false;
@@ -63,73 +61,50 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
   const emAndamento = obras.filter(o => o.status === 'EM_ANDAMENTO');
   const concluidas = obras.filter(o => o.status === 'CONCLUIDO');
 
-  // SERVER ACTION: Criar Obra (Segurança extra: bloqueia técnicos)
+  // SERVER ACTION: Criar O.S.
   async function criarObra(formData: FormData) {
     "use server";
-    
-    // Verificação de segurança adicional no backend
     const store = await cookies();
-    if (store.get("usuario_role")?.value !== "INTERNO") {
-       throw new Error("Acesso negado.");
-    }
+    if (store.get("usuario_role")?.value !== "INTERNO") throw new Error("Acesso negado.");
 
     const title = formData.get("title") as string;
     const dateString = formData.get("date") as string;
     
     let dateObj = null;
-    if (dateString) {
-      dateObj = new Date(`${dateString}T12:00:00Z`);
-    }
+    if (dateString) dateObj = new Date(`${dateString}T12:00:00Z`);
 
     if (title) {
       await prisma.serviceOrder.create({
-        data: { 
-          title, 
-          status: 'AGENDADO',
-          date: dateObj
-        }
+        data: { title, status: 'AGENDADO', date: dateObj }
       });
     }
-    
     revalidatePath("/obras");
     redirect("/obras"); 
   }
 
-  // SERVER ACTION: Excluir Obra e Anexos (Segurança extra)
+  // SERVER ACTION: Excluir O.S.
   async function deletarObra(formData: FormData) {
     "use server";
-    
-    // Verificação de segurança adicional no backend
     const store = await cookies();
-    if (store.get("usuario_role")?.value !== "INTERNO") {
-       throw new Error("Acesso negado.");
-    }
+    if (store.get("usuario_role")?.value !== "INTERNO") throw new Error("Acesso negado.");
 
     const id = parseInt(formData.get("id") as string);
-
-    // 1. Pega os anexos da obra antes de apagar o card
     const obra = await prisma.serviceOrder.findUnique({
       where: { id },
       include: { attachments: true }
     });
 
-    // 2. Se tiver arquivos, vai no Supabase e apaga o peso morto primeiro
     if (obra && obra.attachments.length > 0) {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
       const supabase = createClient(supabaseUrl, supabaseKey);
-
-      // Descobre o nome exato do arquivo lá no balde cortando o final da URL
       const arquivosParaApagar = obra.attachments.map(a => {
         const partes = a.fileUrl.split('/');
         return partes[partes.length - 1]; 
       });
-
-      // Comando de detonação no Supabase Storage
       await supabase.storage.from('obras-anexos').remove(arquivosParaApagar);
     }
 
-    // 3. Agora sim, apaga o card e todo o texto do banco de dados de uma vez
     await prisma.serviceOrder.delete({ where: { id } });
     revalidatePath("/obras");
   }
@@ -143,38 +118,23 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
     return (
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-3 group hover:shadow-md transition flex flex-col">
         <div className="mb-2">
-          {/* Título */}
           <h3 className="font-bold text-gray-900 leading-tight">{obra.title}</h3>
         </div>
-        
         <div className="mb-2">
           <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 inline-flex items-center gap-1">
             📅 {dataFormatada}
           </span>
         </div>
-
         <p className="text-xs text-gray-500 mb-3 line-clamp-2 flex-1">
           {obra.description || "Sem detalhes adicionais ainda..."}
         </p>
-        
         <div className="flex justify-between items-center border-t border-gray-100 pt-3 mt-auto">
-          
-          {/* BLOQUEIO VISUAL: Só o cargo INTERNO consegue excluir a OS */}
           {cargoDoUsuario === "INTERNO" ? (
             <form action={deletarObra}>
               <input type="hidden" name="id" value={obra.id} />
-              <button 
-                type="submit" 
-                className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition"
-                title="Excluir OS"
-              >
-                🗑️
-              </button>
+              <button type="submit" className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition" title="Excluir OS">🗑️</button>
             </form>
-          ) : (
-            <div></div> // Espaço vazio para alinhar o botão "Ver OS" à direita
-          )}
-
+          ) : (<div></div>)}
           <Link href={`/obras/detalhes/${obra.id}`} className="text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 px-3 py-1.5 rounded transition">
             Ver OS ➔
           </Link>
@@ -186,19 +146,17 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
   return (
     <div className="p-4 md:p-8 h-[calc(100vh-60px)] flex flex-col">
       
-      {/* MODAL DE NOVA OBRA: TRAVADO PARA INTERNO */}
+      {/* MODAL DE NOVA O.S. */}
       {showNovaObra && cargoDoUsuario === "INTERNO" && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
             <h2 className="text-xl font-bold mb-4 text-gray-900">Nova Ordem de Serviço</h2>
             <form action={criarObra}>
               <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Título/Identificação da Obra</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Título/Identificação do Serviço</label>
                 <input 
-                  type="text" 
-                  name="title" 
-                  required 
-                  placeholder="Ex: Obra Bonadio - Home Theater" 
+                  type="text" name="title" required 
+                  placeholder="Ex: Instalação - João Silva" 
                   className="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                   autoFocus
                 />
@@ -206,10 +164,7 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
               <div className="mb-6">
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Data Agendada</label>
                 <input 
-                  type="date" 
-                  name="date" 
-                  required 
-                  defaultValue={dataAtual} // Já vem preenchido com a data de hoje ao abrir
+                  type="date" name="date" required defaultValue={dataAtual}
                   className="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -226,23 +181,18 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
 
       <header className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 shrink-0">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Quadro de Obras</h1>
-          <p className="text-gray-500 mt-1">Gerencie o andamento e a agenda diária de serviços.</p>
+          <h1 className="text-3xl font-bold text-gray-900">Quadro de Serviços</h1>
+          <p className="text-gray-500 mt-1">Gerencie o andamento e a agenda diária de ordens de serviço.</p>
         </div>
         
         <div className="flex flex-wrap items-center gap-4">
-          {/* FILTRO DE AGENDA MELHORADO */}
           <form method="GET" className="flex items-center gap-2">
             <span className="text-sm font-bold text-gray-600">📅 Agenda:</span>
             <input 
-              type="date" 
-              name="data" 
-              defaultValue={filtroData} 
+              type="date" name="data" defaultValue={filtroData} 
               className="border border-gray-300 bg-white p-2 rounded-lg text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer w-[140px]" 
             />
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition">
-              Ir
-            </button>
+            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition">Ir</button>
             {!verTodos && (
               <Link href="/obras?todos=true" className="px-3 text-xs text-blue-600 hover:text-blue-800 font-bold bg-blue-50 py-2 rounded-lg border border-blue-100 transition">
                 Ver Todos os Dias
@@ -250,10 +200,9 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
             )}
           </form>
 
-          {/* BLOQUEIO: Só Cargo INTERNO vê o botão de Nova Obra */}
           {cargoDoUsuario === "INTERNO" && (
             <Link href="/obras?nova=true" className="bg-slate-900 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-slate-800 transition shadow-sm flex items-center gap-2">
-              <span>+</span> Nova Obra
+              <span>+</span> Nova O.S.
             </Link>
           )}
         </div>
@@ -303,7 +252,7 @@ export default async function ObrasPage(props: { searchParams: Promise<{ nova?: 
           </div>
           <div className="overflow-y-auto flex-1 pr-1 custom-scrollbar">
             {concluidas.map(obra => <ObraCard key={obra.id} obra={obra} />)}
-            {concluidas.length === 0 && <p className="text-sm text-green-300 text-center py-6 border-2 border-dashed border-green-100 rounded-lg">Nenhuma obra finalizada.</p>}
+            {concluidas.length === 0 && <p className="text-sm text-green-300 text-center py-6 border-2 border-dashed border-green-100 rounded-lg">Nenhum serviço finalizado.</p>}
           </div>
         </div>
 
