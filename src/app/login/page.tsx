@@ -43,7 +43,7 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
     <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
         <h1 className="text-2xl font-bold text-center text-gray-800 mb-1">
-          Estoque <span className="text-blue-500">Smart Touch</span>
+          Estoque <span className="text-blue-500">Nexar Hub</span>
         </h1>
         <p className="text-center text-gray-500 text-sm mb-6">
           Acesso restrito a colaboradores internos

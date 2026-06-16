@@ -69,7 +69,7 @@ export default async function ImprimirOSPage(props: { params: Promise<{ id: stri
         {/* CABEÇALHO */}
         <header className="flex justify-between items-center border-b-2 border-slate-800 pb-6 mb-6 shrink-0">
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tighter">SMART TOUCH</h1>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tighter">Nexar Hub</h1>
             <p className="text-xs font-bold text-slate-500 tracking-widest uppercase">Automação Residencial</p>
           </div>
           <div className="text-right">

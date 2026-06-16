@@ -49,7 +49,7 @@ export default async function OficinaPage(props: { searchParams: Promise<{ error
     <div className="p-4 md:p-8">
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Oficina & Manutenção</h1>
-        <p className="text-gray-500 mt-1">Controle de revisões e gastos da frota Smart Touch.</p>
+        <p className="text-gray-500 mt-1">Controle de revisões e gastos da frota Nexar Hub.</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

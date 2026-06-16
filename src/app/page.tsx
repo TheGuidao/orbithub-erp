@@ -47,7 +47,7 @@ export default async function DashboardPage() {
         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">Visão Geral</h1>
-            <p className="text-slate-500 mt-1">Bem-vindo ao centro de comando da <span className="font-bold text-slate-700">Smart Touch</span>.</p>
+            <p className="text-slate-500 mt-1">Bem-vindo ao centro de comando da <span className="font-bold text-slate-700">Nexar Hub</span>.</p>
           </div>
           <div className="flex gap-3">
             <Link href="/obras?nova=true" className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition shadow-sm">

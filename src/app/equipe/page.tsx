@@ -113,7 +113,7 @@ export default async function EquipePage(props: { searchParams: Promise<{ edit?:
       <header className="mb-8 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Gestão de Equipe</h1>
-          <p className="text-gray-500 mt-1">Controle de acessos e cargos da Smart Touch.</p>
+          <p className="text-gray-500 mt-1">Controle de acessos e cargos da Nexar Hub.</p>
         </div>
         {userToEdit && (
           <Link href="/equipe" className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium text-sm hover:bg-gray-300 transition">
