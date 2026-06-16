@@ -28,14 +28,43 @@ model User {
   comments      Comment[]
 }
 
+// ==========================================
+// NOVO MÓDULO: CATEGORIAS DINÂMICAS
+// ==========================================
+
+model Category {
+  id            Int           @id @default(autoincrement())
+  name          String        @unique // Ex: "Áudio e Vídeo", "Insumos"
+  type          String        @default("EQUIPAMENTO") // "EQUIPAMENTO" ou "INSUMO"
+  
+  subcategories Subcategory[]
+}
+
+model Subcategory {
+  id            Int           @id @default(autoincrement())
+  name          String        // Ex: "TV com Suporte", "Cabos"
+  categoryId    Int
+  
+  category      Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  materials     Material[]
+}
+
 model Material {
-  id           Int           @id @default(autoincrement())
-  name         String
-  category     String
-  brand        String?       // NOVO: Marca do Equipamento/Insumo
-  minStock     Int           @default(5)
-  currentStock Int           @default(0)
-  transactions Transaction[]
+  id            Int           @id @default(autoincrement())
+  name          String
+  
+  // A CATEGORIA ANTIGA AGORA FOI SUBSTITUÍDA PELO LINK DA SUBCATEGORIA
+  // Mantive a string "category" opcional só para não quebrar seus dados antigos agora, 
+  // mas o foco será no subcategoryId.
+  category      String?       
+  subcategoryId Int?
+  
+  brand         String?       // NOVO: Marca do Equipamento/Insumo
+  minStock      Int           @default(5)
+  currentStock  Int           @default(0)
+  
+  subcategory   Subcategory?  @relation(fields: [subcategoryId], references: [id])
+  transactions  Transaction[]
   
   // NOVA RELAÇÃO: Histórico de quais obras usaram este material
   serviceOrders ServiceOrderMaterial[]
