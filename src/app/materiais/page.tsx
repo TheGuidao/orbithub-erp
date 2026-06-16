@@ -19,7 +19,52 @@ export default async function MateriaisPage(props: {
   const editId = searchParams?.edit ? parseInt(searchParams.edit) : null;
   const materialToEdit = editId ? await prisma.material.findUnique({ where: { id: editId } }) : null;
 
-  // Carrega as Categorias e Subcategorias dinâmicas do banco (Apenas tipo EQUIPAMENTO)
+  // AUTO-SEED: Se não houver categorias no banco, insere as antigas para garantir o histórico
+  const totalCategorias = await prisma.category.count();
+  if (totalCategorias === 0) {
+    await prisma.category.create({
+      data: {
+        name: "Automação",
+        type: "EQUIPAMENTO",
+        subcategories: {
+          create: [
+            { name: "Centrais de Automação" },
+            { name: "Módulos de Automação" }
+          ]
+        }
+      }
+    });
+    await prisma.category.create({
+      data: {
+        name: "Áudio e Vídeo",
+        type: "EQUIPAMENTO",
+        subcategories: {
+          create: [
+            { name: "Receivers e Áudio" },
+            { name: "TV com Suporte" },
+            { name: "Projetor, Tela Motorizada e Lift/Flap" },
+            { name: "Painéis de LED" }
+          ]
+        }
+      }
+    });
+    await prisma.category.create({
+      data: {
+        name: "Rede e Infraestrutura",
+        type: "EQUIPAMENTO",
+        subcategories: {
+          create: [
+            { name: "Equipamentos de Rede" },
+            { name: "Montagem de Quadros" },
+            { name: "Cabeamento" }
+          ]
+        }
+      }
+    });
+    revalidatePath("/materiais");
+  }
+
+  // Carrega as Categorias e Subcategorias dinâmicas
   const categoriasDoBanco = await prisma.category.findMany({
     where: { type: "EQUIPAMENTO" },
     include: { subcategories: { orderBy: { name: 'asc' } } },
@@ -30,7 +75,7 @@ export default async function MateriaisPage(props: {
   const whereClause: any = {
     OR: [
       { subcategory: { category: { type: "EQUIPAMENTO" } } },
-      { subcategoryId: null, category: { notIn: ["Insumos", "Ferramentas"] } } // Suporte a dados antigos
+      { subcategoryId: null, category: { notIn: ["Insumos", "Ferramentas"] } }
     ]
   };
 
@@ -64,7 +109,7 @@ export default async function MateriaisPage(props: {
     ? todosMateriais.filter(m => m.currentStock <= m.minStock)
     : todosMateriais;
 
-  // --- SERVER ACTIONS DE CADASTRO ---
+  // --- SERVER ACTIONS DE CADASTRO E EXCLUSÃO ---
 
   async function salvarMaterial(formData: FormData) {
     "use server";
@@ -114,12 +159,10 @@ export default async function MateriaisPage(props: {
     if (name) {
       try {
         await prisma.category.create({ data: { name: name.trim(), type: "EQUIPAMENTO" } });
-      } catch (e) {
-        // Ignora duplicados ou trata erro de forma silenciosa
-      }
+      } catch (e) {}
     }
     revalidatePath("/materiais");
-    redirect("/materiais");
+    redirect("/materiais?action=nova_cat");
   }
 
   async function criarSubcategoria(formData: FormData) {
@@ -130,79 +173,151 @@ export default async function MateriaisPage(props: {
       await prisma.subcategory.create({ data: { name: name.trim(), categoryId } });
     }
     revalidatePath("/materiais");
-    redirect("/materiais");
+    redirect("/materiais?action=nova_sub");
+  }
+
+  async function deletarCategoria(formData: FormData) {
+    "use server";
+    const id = parseInt(formData.get("categoryId") as string);
+    
+    const subcategories = await prisma.subcategory.findMany({ where: { categoryId: id } });
+    const subIds = subcategories.map(s => s.id);
+    const emUso = await prisma.material.count({ where: { subcategoryId: { in: subIds } } });
+
+    if (emUso > 0) {
+      redirect("/materiais?action=nova_cat&error=cat_em_uso");
+    }
+
+    await prisma.category.delete({ where: { id } });
+    revalidatePath("/materiais");
+    redirect("/materiais?action=nova_cat");
+  }
+
+  async function deletarSubcategoria(formData: FormData) {
+    "use server";
+    const id = parseInt(formData.get("subcategoryId") as string);
+    
+    const emUso = await prisma.material.count({ where: { subcategoryId: id } });
+
+    if (emUso > 0) {
+      redirect("/materiais?action=nova_sub&error=sub_em_uso");
+    }
+
+    await prisma.subcategory.delete({ where: { id } });
+    revalidatePath("/materiais");
+    redirect("/materiais?action=nova_sub");
   }
 
   return (
     <div className="relative">
       
-      {/* MODAL: NOVA CATEGORIA PAI */}
+      {/* MODAL: NOVA CATEGORIA PAI COM GERENCIADOR */}
       {action === "nova_cat" && (
         <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <form action={criarCategoria} className="bg-white p-6 rounded-2xl max-w-md w-full shadow-xl border border-gray-100">
-            <h3 className="font-bold text-xl text-gray-900 mb-2">📦 Criar Nova Categoria</h3>
-            <p className="text-xs text-gray-500 mb-4">Exemplos: Automação, Áudio e Vídeo, Rede, Redes e Infraestrutura.</p>
-            <input type="text" name="categoryName" required placeholder="Nome da categoria principal..." className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
-            <div className="flex gap-2 justify-end">
-              <Link href="/materiais" className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold text-sm transition">Cancelar</Link>
-              <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition">Salvar Categoria</button>
+          <div className="bg-white p-6 rounded-2xl max-w-md w-full shadow-xl border border-gray-100 max-h-[85vh] flex flex-col">
+            <h3 className="font-bold text-xl text-gray-900 mb-1">📦 Criar Nova Categoria</h3>
+            <p className="text-xs text-gray-500 mb-4">Categorias principais do catálogo de equipamentos.</p>
+            
+            {erroURL === "cat_em_uso" && (
+              <p className="bg-red-50 text-red-600 p-2 rounded text-xs font-bold mb-3 border border-red-200">
+                ⚠️ Não é possível excluir: existem equipamentos vinculados às subcategorias desta categoria.
+              </p>
+            )}
+
+            <form action={criarCategoria} className="flex gap-2 mb-6 shrink-0">
+              <input type="text" name="categoryName" required placeholder="Ex: Seguranca" className="flex-1 border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+              <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition">Criar</button>
+            </form>
+
+            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 shrink-0">Categorias Existentes</h4>
+            <div className="flex-1 overflow-y-auto divide-y border rounded-xl px-3 bg-gray-50/50 mb-4">
+              {categoriasDoBanco.map(c => (
+                <div key={c.id} className="py-2.5 flex justify-between items-center text-sm">
+                  <span className="font-medium text-gray-800">{c.name}</span>
+                  <form action={deletarCategoria}>
+                    <input type="hidden" name="categoryId" value={c.id} />
+                    <button type="submit" className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition" title="Excluir Categoria">
+                      🗑️
+                    </button>
+                  </form>
+                </div>
+              ))}
             </div>
-          </form>
+
+            <div className="flex justify-end shrink-0">
+              <Link href="/materiais" className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2 rounded-lg font-bold text-sm transition text-center w-full sm:w-auto">Fechar Janela</Link>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* MODAL: NOVA SUBCATEGORIA */}
+      {/* MODAL: NOVA SUBCATEGORIA COM GERENCIADOR */}
       {action === "nova_sub" && (
         <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <form action={criarSubcategoria} className="bg-white p-6 rounded-2xl max-w-md w-full shadow-xl border border-gray-100">
-            <h3 className="font-bold text-xl text-gray-900 mb-2">🌿 Criar Nova Subcategoria</h3>
-            <p className="text-xs text-gray-500 mb-4">Exemplos: Centrais, Módulos, Receivers, Caixas de Som, Cabeamento.</p>
-            
-            <label className="block text-xs font-bold text-gray-600 mb-1">Vincular à Categoria Principal:</label>
-            <select name="parentCategoryId" required className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-3 text-sm">
-              <option value="" disabled selected>Escolha uma categoria...</option>
-              {categoriasDoBanco.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+          <div className="bg-white p-6 rounded-2xl max-w-md w-full shadow-xl border border-gray-100 max-h-[85vh] flex flex-col">
+            <h3 className="font-bold text-xl text-gray-900 mb-1">🌿 Criar Nova Subcategoria</h3>
+            <p className="text-xs text-gray-500 mb-4">Subdivisões vinculadas a uma categoria pai.</p>
 
-            <label className="block text-xs font-bold text-gray-600 mb-1">Nome da Subcategoria:</label>
-            <input type="text" name="subcategoryName" required placeholder="Ex: Amplificadores de Parede" className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
-            
-            <div className="flex gap-2 justify-end">
-              <Link href="/materiais" className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold text-sm transition">Cancelar</Link>
-              <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition">Salvar Subcategoria</button>
+            {erroURL === "sub_em_uso" && (
+              <p className="bg-red-50 text-red-600 p-2 rounded text-xs font-bold mb-3 border border-red-200">
+                ⚠️ Não é possível excluir: existem equipamentos cadastrados nesta subcategoria.
+              </p>
+            )}
+
+            <form action={criarSubcategoria} className="space-y-3 mb-6 shrink-0 border-b pb-4">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Categoria Pai:</label>
+                <select name="parentCategoryId" required className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm">
+                  <option value="" disabled selected>Selecione...</option>
+                  {categoriasDoBanco.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <input type="text" name="subcategoryName" required placeholder="Ex: Câmeras IP" className="flex-1 border border-gray-300 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition">Criar</button>
+              </div>
+            </form>
+
+            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 shrink-0">Subcategorias por Grupo</h4>
+            <div className="flex-1 overflow-y-auto space-y-3 mb-4">
+              {categoriasDoBanco.map(cat => (
+                <div key={cat.id} className="border rounded-xl p-3 bg-gray-50/50">
+                  <span className="text-xs font-bold text-blue-600 uppercase tracking-wide block mb-1.5">{cat.name}</span>
+                  {cat.subcategories.length === 0 ? (
+                    <span className="text-xs text-gray-400 italic">Nenhuma subcategoria vinculada.</span>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {cat.subcategories.map(sub => (
+                        <div key={sub.id} className="py-1.5 flex justify-between items-center text-sm">
+                          <span className="text-gray-700">{sub.name}</span>
+                          <form action={deletarSubcategoria}>
+                            <input type="hidden" name="subcategoryId" value={sub.id} />
+                            <button type="submit" className="text-red-500 hover:bg-red-50 px-1.5 py-0.5 rounded transition text-xs" title="Excluir Subcategoria">
+                              🗑️
+                            </button>
+                          </form>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-          </form>
+
+            <div className="flex justify-end shrink-0">
+              <Link href="/materiais" className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2 rounded-lg font-bold text-sm transition text-center w-full sm:w-auto">Fechar Janela</Link>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* CANCELAR EDIÇÃO */}
-      {materialToEdit && (
-        <div className="flex justify-end mb-4">
-          <Link href="/materiais" className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium text-sm hover:bg-gray-300 transition">
-            Cancelar Edição
-          </Link>
-        </div>
-      )}
-
+      {/* RENDERIZAÇÃO DO RESTANTE DA PÁGINA (IGUAL ANTERIORMENTE) */}
       {erroURL === "em_uso" && (
         <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg mb-6 border border-red-200 font-medium">
           ⚠️ <strong>Operação Negada:</strong> Você não pode excluir um equipamento que já possui histórico de retiradas. Clique em "Editar" e deixe o saldo dele como zero em vez de excluir.
         </div>
       )}
 
-      {mostrarSomenteCriticos && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h3 className="text-red-800 font-bold text-lg flex items-center gap-2">⚠️ Visualizando Estoque Crítico</h3>
-            <p className="text-red-600 text-sm mt-1">Mostrando apenas itens abaixo do limite mínimo.</p>
-          </div>
-          <Link href="/materiais" className="bg-white border border-red-200 text-red-600 font-bold px-4 py-2 rounded-lg hover:bg-red-100 transition text-sm">
-            Ver Todos os Itens
-          </Link>
-        </div>
-      )}
-
-      {/* FORMULÁRIO PRINCIPAL */}
       <form action={salvarMaterial} className={`p-6 rounded-xl shadow-sm border mb-8 transition-all ${materialToEdit ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'}`}>
         <h2 className={`text-xl font-bold mb-4 ${materialToEdit ? 'text-blue-800' : 'text-gray-900'}`}>
           {materialToEdit ? `Editando: ${materialToEdit.name}` : 'Cadastrar Novo Equipamento'}
@@ -225,9 +340,9 @@ export default async function MateriaisPage(props: {
             <div className="flex justify-between items-center mb-1">
               <label className="block text-xs font-semibold text-gray-600">Subcategoria</label>
               <div className="flex gap-1">
-                <Link href="/materiais?action=nova_cat" className="text-[10px] text-blue-600 font-bold hover:underline" title="Criar Categoria Principal">+ Cat</Link>
+                <Link href="/materiais?action=nova_cat" className="text-[10px] text-blue-600 font-bold hover:underline" title="Gerenciar Categorias Principal">+ Cat</Link>
                 <span className="text-[10px] text-gray-300">|</span>
-                <Link href="/materiais?action=nova_sub" className="text-[10px] text-blue-600 font-bold hover:underline" title="Criar Subcategoria">+ Sub</Link>
+                <Link href="/materiais?action=nova_sub" className="text-[10px] text-blue-600 font-bold hover:underline" title="Gerenciar Subcategorias">+ Sub</Link>
               </div>
             </div>
             <select name="subcategoryId" defaultValue={materialToEdit?.subcategoryId || ""} required className="w-full border border-gray-300 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm">
@@ -284,7 +399,7 @@ export default async function MateriaisPage(props: {
         </form>
       </div>
 
-      {/* TABELA DE DADOS */}
+      {/* TABELA DE EQUIPAMENTOS */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
@@ -303,7 +418,6 @@ export default async function MateriaisPage(props: {
               materiais.map((m) => {
                 const emAlerta = m.currentStock <= m.minStock;
                 
-                // Trata exibição se o item tiver relação nova ou categoria antiga em texto solto
                 const labelCategoria = m.subcategory 
                   ? `${m.subcategory.category.name} → ${m.subcategory.name}`
                   : m.category || "Sem categoria";
