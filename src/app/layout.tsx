@@ -9,7 +9,7 @@ import MenuNavegacao from "./components/MenuNavegacao";
 
 const inter = Inter({ subsets: ["latin"] });
 
-export const metadata: Metadata = { title: "Smart Touch", description: "Gestão Smart Touch" };
+export const metadata: Metadata = { title: "Nexar Hub", description: "Gestão Nexar Hub" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
