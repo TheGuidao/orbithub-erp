@@ -23,7 +23,6 @@ export default async function DashboardPage() {
   const primeiroDiaMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
 
   // 2. Busca simultânea de todos os dados cruciais (Performance máxima)
-  // ADICIONADO: Busca dos equipamentos em RMA
   const [todasObras, materiais, veiculos, rmasAtivos] = await Promise.all([
     prisma.serviceOrder.findMany({ include: { team: true }, orderBy: { date: 'asc' } }),
     prisma.material.findMany({ orderBy: { name: 'asc' } }),
@@ -51,7 +50,7 @@ export default async function DashboardPage() {
           </div>
           <div className="flex gap-3">
             <Link href="/obras?nova=true" className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition shadow-sm">
-              + Nova Obra
+              + Nova O.S.
             </Link>
           </div>
         </header>
@@ -60,12 +59,12 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-blue-500 flex flex-col justify-between hover:shadow-md transition">
             <div className="flex justify-between items-start">
-              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Obras Hoje</h3>
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Serviços Hoje</h3>
               <span className="text-2xl">📅</span>
             </div>
             <div className="mt-4">
               <p className="text-4xl font-black text-slate-800">{obrasHoje.length}</p>
-              <p className="text-xs text-blue-600 font-bold mt-1">Agendadas para hoje</p>
+              <p className="text-xs text-blue-600 font-bold mt-1">Agendados para hoje</p>
             </div>
           </div>
 
@@ -80,7 +79,7 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          {/* NOVO CARD: RMA */}
+          {/* CARD: RMA */}
           <Link href="/materiais/rma" className="bg-red-50 p-6 rounded-2xl shadow-sm border border-red-200 border-l-4 border-l-red-600 flex flex-col justify-between hover:bg-red-100 hover:shadow-md transition cursor-pointer group">
             <div className="flex justify-between items-start">
               <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider group-hover:underline">Em Garantia / RMA</h3>
@@ -105,7 +104,7 @@ export default async function DashboardPage() {
 
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-green-500 flex flex-col justify-between hover:shadow-md transition">
             <div className="flex justify-between items-start">
-              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Concluídas Mês</h3>
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Concluídos Mês</h3>
               <span className="text-2xl">✅</span>
             </div>
             <div className="mt-4">
@@ -126,7 +125,7 @@ export default async function DashboardPage() {
               {obrasHoje.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
                   <span className="text-4xl mb-3">🏖️</span>
-                  <p className="text-sm font-medium">Nenhuma obra agendada para hoje.</p>
+                  <p className="text-sm font-medium">Nenhum serviço agendado para hoje.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
