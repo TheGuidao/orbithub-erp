@@ -28,7 +28,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               
               {/* O LOGO AGORA É UM BOTÃO CLICÁVEL! */}
               <Link href={linkHome} className="font-bold text-xl tracking-tight shrink-0 hover:scale-105 transition-transform cursor-pointer">
-                Smart <span className="text-blue-500">Touch</span>
+                Nexar <span className="text-blue-500">Hub</span>
               </Link>
               
               <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm font-medium">
