@@ -2,7 +2,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "next";
+import { useEffect, useState } from "react"; // ✅ CORRIGIDO: era "next", causava tela branca
 
 export default function MenuNavegacao({ roleUsuario, nomeUsuario }: { roleUsuario: string | undefined, nomeUsuario: string | undefined }) {
   const pathname = usePathname();
@@ -24,7 +24,9 @@ export default function MenuNavegacao({ roleUsuario, nomeUsuario }: { roleUsuari
   const activeClass = "text-blue-400 border-blue-400 font-bold";
   const inactiveClass = "text-gray-300 border-transparent hover:text-blue-300 hover:border-blue-300/50";
 
-  const isMaster = nomeUsuario === 'Administrador Mestre' || permissions.master === true;
+  // ✅ CORRIGIDO: isMaster agora usa roleUsuario === "INTERNO" como fonte primária,
+  // igual ao que é gravado no cookie no login. Não depende mais do nome do usuário.
+  const isMaster = roleUsuario === "INTERNO" || permissions.master === true;
 
   // Se o cara não pode ver o painel nem os serviços, significa que ele é um técnico de campo puro
   if (!isMaster && permissions.painel?.ver !== true && permissions.servicos?.ver !== true) {

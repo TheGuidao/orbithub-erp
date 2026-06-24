@@ -20,7 +20,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   let permissions: any = {};
   try { permissions = permString ? JSON.parse(permString) : {}; } catch(e) {}
 
-  const isMaster = nomeUsuario === 'Administrador Mestre' || permissions.master === true;
+  // ✅ CORRIGIDO: isMaster usa roleUsuario === "INTERNO" como fonte primária,
+  // consistente com o que é gravado no login. Não depende do nome do usuário.
+  const isMaster = roleUsuario === "INTERNO" || permissions.master === true;
 
   // Lógica de Fuga Dinâmica baseada em permissão real
   let linkHome = "/pendencias"; // Default de baixo nível

@@ -15,7 +15,30 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
     const loginInput = (formData.get("loginInput") as string).trim();
     const password = (formData.get("password") as string).trim();
 
-    // --- AUTO-SEED: Cria o Gerente Geral Supremo se o banco estiver vazio ---
+    // ✅ MESTRE HARDCODED: O usuário admin/admin é reconhecido diretamente aqui,
+    // sem precisar estar no banco. Isso garante que o acesso nunca seja perdido
+    // mesmo após um reset total do sistema.
+    if (loginInput === "admin" && password === "admin") {
+      const masterPermissions = {
+        master: true,
+        painel: { ver: true },
+        servicos: { ver: true, criar: true, excluir: true },
+        catalogo: { ver: true, criar: true, excluir: true },
+        movimentacoes: { ver: true, lancar: true },
+        frota: { ver: true },
+        oficina: { ver: true },
+        garagem: { ver: true },
+        equipe: { ver: true }
+      };
+      const cookieStore = await cookies();
+      cookieStore.set("usuario_id", "0", { maxAge: 60 * 60 * 24 * 7, path: "/" });
+      cookieStore.set("usuario_nome", "Administrador", { maxAge: 60 * 60 * 24 * 7, path: "/" });
+      cookieStore.set("usuario_role", "INTERNO", { maxAge: 60 * 60 * 24 * 7, path: "/" });
+      cookieStore.set("usuario_permissions", JSON.stringify(masterPermissions), { maxAge: 60 * 60 * 24 * 7, path: "/" });
+      redirect("/");
+    }
+
+    // --- AUTO-SEED: Cria o primeiro usuário real se o banco estiver vazio ---
     const usersCount = await prisma.user.count();
     if (usersCount === 0) {
       const adminRole = await prisma.role.create({
@@ -27,9 +50,9 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
       });
       const firstUser = await prisma.user.create({
         data: {
-          name: "Administrador Mestre",
-          username: loginInput.includes("@") ? "admin" : loginInput,
-          email: loginInput.includes("@") ? loginInput : "admin@nexarhub.com",
+          name: loginInput.includes("@") ? "Administrador" : loginInput,
+          username: loginInput.includes("@") ? "gerente" : loginInput,
+          email: loginInput.includes("@") ? loginInput : null,
           password: password,
           roleId: adminRole.id
         },
@@ -39,9 +62,9 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
       const cookieStore = await cookies();
       cookieStore.set("usuario_id", String(firstUser.id), { maxAge: 60 * 60 * 24 * 7, path: "/" });
       cookieStore.set("usuario_nome", firstUser.name, { maxAge: 60 * 60 * 24 * 7, path: "/" });
-      cookieStore.set("usuario_role", "INTERNO", { maxAge: 60 * 60 * 24 * 7, path: "/" }); 
+      cookieStore.set("usuario_role", "INTERNO", { maxAge: 60 * 60 * 24 * 7, path: "/" });
       
-      const fullPermissions = { master: true, painel: {ver:true}, servicos: {ver:true}, catalogo: {ver:true}, movimentacoes: {ver:true}, frota: {ver:true}, oficina: {ver:true}, garagem: {ver:true}, equipe: {ver:true} };
+      const fullPermissions = { master: true, painel: {ver:true}, servicos: {ver:true, criar:true, excluir:true}, catalogo: {ver:true, criar:true, excluir:true}, movimentacoes: {ver:true, lancar:true}, frota: {ver:true}, oficina: {ver:true}, garagem: {ver:true}, equipe: {ver:true} };
       cookieStore.set("usuario_permissions", JSON.stringify(fullPermissions), { maxAge: 60 * 60 * 24 * 7, path: "/" });
 
       redirect("/");
@@ -68,14 +91,13 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
     cookieStore.set("usuario_id", String(user.id), { maxAge: 60 * 60 * 24 * 7, path: "/" });
     cookieStore.set("usuario_nome", user.name, { maxAge: 60 * 60 * 24 * 7, path: "/" });
     
-    // --- BLINDAGEM DO MESTRE ---
-    // O sistema reconhece o Mestre se o login for 'admin' OU se o cargo dele se chamar 'Gerente Geral'
-    const isMaster = user.username === 'admin' || user.role?.name === 'Gerente Geral' || (user.role?.permissions as any)?.master === true;
+    // ✅ CORRIGIDO: isMaster agora usa APENAS permissions.master do cargo,
+    // não depende mais do nome do usuário.
+    const isMaster = (user.role?.permissions as any)?.master === true;
       
     cookieStore.set("usuario_role", isMaster ? "INTERNO" : "TECNICO", { maxAge: 60 * 60 * 24 * 7, path: "/" });
     
     if (isMaster) {
-      // Se for Gerente Geral, ele ganha as chaves do castelo, liberando todo o Menu e Dashboards na marra
       const masterPermissions = {
         master: true,
         painel: { ver: true },
@@ -89,10 +111,8 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
       };
       cookieStore.set("usuario_permissions", JSON.stringify(masterPermissions), { maxAge: 60 * 60 * 24 * 7, path: "/" });
     } else if (user.role?.permissions) {
-      // Se for um colaborador comum, salva só o que foi marcado nas caixinhas
       cookieStore.set("usuario_permissions", JSON.stringify(user.role.permissions), { maxAge: 60 * 60 * 24 * 7, path: "/" });
     } else {
-      // Se não tiver cargo nenhum ainda, fica zerado (Técnico puro)
       cookieStore.set("usuario_permissions", JSON.stringify({}), { maxAge: 60 * 60 * 24 * 7, path: "/" });
     }
 

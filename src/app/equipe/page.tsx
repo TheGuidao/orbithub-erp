@@ -10,14 +10,16 @@ const prisma = new PrismaClient();
 export default async function EquipePage(props: { searchParams: Promise<{ edit?: string, error?: string, success?: string, action?: string }> }) {
   const cookieStore = await cookies();
   const permissionsCookie = cookieStore.get("usuario_permissions")?.value;
+  const roleUsuario = cookieStore.get("usuario_role")?.value;
   let userPermissions: any = {};
   
   try {
     userPermissions = permissionsCookie ? JSON.parse(permissionsCookie) : {};
   } catch(e) {}
 
-  // Bloqueio inteligente: Só entra se for o 'admin' ou se tiver a permissão específica 'equipe.ver'
-  const isMaster = cookieStore.get("usuario_nome")?.value === 'Administrador Mestre';
+  // ✅ CORRIGIDO: isMaster usa roleUsuario === "INTERNO" como fonte primária,
+  // consistente com o cookie gravado no login.
+  const isMaster = roleUsuario === "INTERNO" || userPermissions?.master === true;
   const podeAcessarEquipe = isMaster || userPermissions?.equipe?.ver === true;
 
   if (!podeAcessarEquipe) {
@@ -59,7 +61,7 @@ export default async function EquipePage(props: { searchParams: Promise<{ edit?:
     const name = formData.get("name") as string;
     const username = (formData.get("username") as string).trim();
     const emailRaw = (formData.get("email") as string).trim();
-    const email = emailRaw === "" ? null : emailRaw; // Salva nulo se vier vazio
+    const email = emailRaw === "" ? null : emailRaw;
     const password = (formData.get("password") as string).trim();
     const roleIdStr = formData.get("roleId") as string;
 
@@ -109,8 +111,11 @@ export default async function EquipePage(props: { searchParams: Promise<{ edit?:
 
   async function criarCargo(formData: FormData) {
     "use server";
-    const name = formData.get("roleName") as string;
+    const name = (formData.get("roleName") as string)?.trim();
     const color = formData.get("roleColor") as string;
+
+    // ✅ CORRIGIDO: Redireciona com erro se nome vier vazio
+    if (!name) redirect("/equipe?action=gerenciar_cargos&error=nome_vazio");
 
     const permissions = {
       painel: { ver: formData.get("p_painel_ver") === "on" },
@@ -131,15 +136,12 @@ export default async function EquipePage(props: { searchParams: Promise<{ edit?:
       frota: { ver: formData.get("p_frota_ver") === "on" },
       oficina: { ver: formData.get("p_oficina_ver") === "on" },
       garagem: { ver: formData.get("p_garagem_ver") === "on" },
-      // NOVA CAIXINHA PARA EQUIPE
       equipe: { ver: formData.get("p_equipe_ver") === "on" }
     };
 
-    if (name) {
-      await prisma.role.create({
-        data: { name: name.trim(), color, permissions }
-      });
-    }
+    await prisma.role.create({
+      data: { name, color, permissions }
+    });
 
     revalidatePath("/equipe");
     redirect("/equipe?action=gerenciar_cargos");
@@ -148,8 +150,14 @@ export default async function EquipePage(props: { searchParams: Promise<{ edit?:
   async function deletarCargo(formData: FormData) {
     "use server";
     const id = parseInt(formData.get("roleId") as string);
+
+    // ✅ CORRIGIDO: Protege cargos com permissions.master para não apagar o Gerente Geral
+    const cargo = await prisma.role.findUnique({ where: { id } });
+    if ((cargo?.permissions as any)?.master === true) redirect("/equipe?action=gerenciar_cargos&error=cargo_protegido");
+
     const emUso = await prisma.user.count({ where: { roleId: id } });
     if (emUso > 0) redirect("/equipe?action=gerenciar_cargos&error=role_em_uso");
+
     await prisma.role.delete({ where: { id } });
     revalidatePath("/equipe");
     redirect("/equipe?action=gerenciar_cargos");
@@ -184,6 +192,20 @@ export default async function EquipePage(props: { searchParams: Promise<{ edit?:
             {erroURL === "role_em_uso" && (
               <p className="bg-red-50 text-red-600 p-2 rounded-lg text-xs font-bold mb-3 border border-red-200 shrink-0">
                 ⚠️ Não é possível excluir: existem colaboradores ativos vinculados a este cargo.
+              </p>
+            )}
+
+            {/* ✅ NOVO: Mensagem de cargo protegido */}
+            {erroURL === "cargo_protegido" && (
+              <p className="bg-red-50 text-red-600 p-2 rounded-lg text-xs font-bold mb-3 border border-red-200 shrink-0">
+                🔒 Este cargo é protegido pelo sistema e não pode ser excluído.
+              </p>
+            )}
+
+            {/* ✅ NOVO: Mensagem de nome vazio */}
+            {erroURL === "nome_vazio" && (
+              <p className="bg-red-50 text-red-600 p-2 rounded-lg text-xs font-bold mb-3 border border-red-200 shrink-0">
+                ⚠️ O nome do cargo não pode ser vazio.
               </p>
             )}
 
@@ -235,7 +257,7 @@ export default async function EquipePage(props: { searchParams: Promise<{ edit?:
                     <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer"><input type="checkbox" name="p_mov_lancar" /> Lançar Entrada/Saída</label>
                   </div>
 
-                  <div className="border rounded-xl p-3 bg-gray-50/50 space-y-2">
+                  <div className="border rounded-xl p-3 bg-gray-50/50 space-y-2 border-red-200 bg-red-50/30">
                     <span className="text-xs font-bold text-red-600 block border-b pb-1 mb-1 border-red-200">👥 Administração</span>
                     <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer"><input type="checkbox" name="p_equipe_ver" /> Acesso à Gestão de Equipe (Restrito)</label>
                   </div>
@@ -254,18 +276,27 @@ export default async function EquipePage(props: { searchParams: Promise<{ edit?:
 
             <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 shrink-0">Cargos Configurados</h4>
             <div className="max-h-36 overflow-y-auto border rounded-xl divide-y px-3 bg-gray-50/50 mb-4 shrink-0">
-              {cargosDisponiveis.map(cargo => (
-                <div key={cargo.id} className="py-2 flex justify-between items-center text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${cargo.color === 'blue' ? 'bg-blue-500' : cargo.color === 'green' ? 'bg-green-500' : cargo.color === 'purple' ? 'bg-purple-500' : cargo.color === 'orange' ? 'bg-orange-500' : cargo.color === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></span>
-                    <span className="font-bold text-gray-800">{cargo.name}</span>
+              {cargosDisponiveis.map(cargo => {
+                // ✅ CORRIGIDO: Cargos com master=true mostram cadeado, sem botão excluir
+                const isProtected = (cargo.permissions as any)?.master === true;
+                return (
+                  <div key={cargo.id} className="py-2 flex justify-between items-center text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${cargo.color === 'blue' ? 'bg-blue-500' : cargo.color === 'green' ? 'bg-green-500' : cargo.color === 'purple' ? 'bg-purple-500' : cargo.color === 'orange' ? 'bg-orange-500' : cargo.color === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}></span>
+                      <span className="font-bold text-gray-800">{cargo.name}</span>
+                      {isProtected && <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">🔒 Protegido</span>}
+                    </div>
+                    {!isProtected ? (
+                      <form action={deletarCargo}>
+                        <input type="hidden" name="roleId" value={cargo.id} />
+                        <button type="submit" className="text-red-500 hover:bg-red-100 p-1 rounded-lg text-xs transition">🗑️ Excluir</button>
+                      </form>
+                    ) : (
+                      <span className="text-xs text-gray-400 italic">Sistema</span>
+                    )}
                   </div>
-                  <form action={deletarCargo}>
-                    <input type="hidden" name="roleId" value={cargo.id} />
-                    <button type="submit" className="text-red-500 hover:bg-red-100 p-1 rounded-lg text-xs transition">🗑️ Excluir</button>
-                  </form>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="flex justify-end shrink-0">
@@ -283,7 +314,7 @@ export default async function EquipePage(props: { searchParams: Promise<{ edit?:
         {userToEdit && <Link href="/equipe" className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Cancelar Edição</Link>}
       </header>
 
-      {/* ERROS */}
+      {/* MENSAGENS DE FEEDBACK */}
       {successURL === "reset_ok" && <div className="bg-green-50 text-green-700 p-3 rounded-lg mb-6 border border-green-200">✅ Sucesso! Sistema resetado.</div>}
       {erroURL === "palavra_reset_invalida" && <div className="bg-red-50 text-red-700 p-3 rounded-lg mb-6 border border-red-200">⚠️ Palavra de confirmação incorreta.</div>}
       {erroURL === "username_exists" && <div className="bg-red-50 text-red-700 p-3 rounded-lg mb-6 border border-red-200">⚠️ Este Login já está sendo usado.</div>}
@@ -296,7 +327,6 @@ export default async function EquipePage(props: { searchParams: Promise<{ edit?:
         </h2>
         {userToEdit && <input type="hidden" name="id" value={userToEdit.id} />}
         
-        {/* GRID DE 5 COLUNAS PARA ACOMODAR O EMAIL */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Nome Completo</label>
@@ -343,7 +373,11 @@ export default async function EquipePage(props: { searchParams: Promise<{ edit?:
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {equipe.map((u) => {
+            {equipe.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-6 py-8 text-center text-gray-400 italic">Nenhum colaborador cadastrado ainda.</td>
+              </tr>
+            ) : equipe.map((u) => {
               const corBadge = u.role?.color && badgeClasses[u.role.color] ? badgeClasses[u.role.color] : "bg-gray-100 text-gray-700 border-gray-200";
               return (
                 <tr key={u.id} className="hover:bg-gray-50">
@@ -371,14 +405,17 @@ export default async function EquipePage(props: { searchParams: Promise<{ edit?:
         </table>
       </div>
 
-      <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 shadow-sm">
-        <h3 className="text-xl font-bold text-red-800 mb-2">⚠️ Zona de Perigo: Factory Reset</h3>
-        <p className="text-sm text-red-700 mb-4">Apaga tudo, exceto admin. Não pode ser desfeito.</p>
-        <form action={resetarSistemaConfirmado} className="flex gap-4 items-end">
-          <input type="text" name="confirmacao" required placeholder="Digite RESETAR" className="border border-red-300 p-2 rounded-lg text-red-900 flex-1" />
-          <button type="submit" className="bg-red-600 text-white font-bold px-6 py-2 rounded-lg">Zerar Sistema</button>
-        </form>
-      </div>
+      {/* ZONA DE PERIGO: só aparece para o mestre */}
+      {isMaster && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 shadow-sm">
+          <h3 className="text-xl font-bold text-red-800 mb-2">⚠️ Zona de Perigo: Factory Reset</h3>
+          <p className="text-sm text-red-700 mb-4">Apaga tudo, exceto admin. Não pode ser desfeito.</p>
+          <form action={resetarSistemaConfirmado} className="flex gap-4 items-end">
+            <input type="text" name="confirmacao" required placeholder="Digite RESETAR" className="border border-red-300 p-2 rounded-lg text-red-900 flex-1" />
+            <button type="submit" className="bg-red-600 text-white font-bold px-6 py-2 rounded-lg">Zerar Sistema</button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
