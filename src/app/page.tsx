@@ -7,22 +7,23 @@ import { redirect } from "next/navigation";
 const prisma = new PrismaClient();
 
 export default async function DashboardPage() {
-  // --- TRAVA DE SEGURANÇA ---
   const cookieStore = await cookies();
-  const cargoDoUsuario = cookieStore.get("usuario_role")?.value;
+  const permString = cookieStore.get("usuario_permissions")?.value;
+  const isMaster = cookieStore.get("usuario_nome")?.value === 'Administrador Mestre';
+  
+  let permissions: any = {};
+  try { permissions = permString ? JSON.parse(permString) : {}; } catch(e) {}
 
-  // Se for Técnico, chuta ele direto para as pendências dele
-  if (cargoDoUsuario === "TECNICO") {
-    redirect("/obras");
+  // TRAVA DE SEGURANÇA BASEADA NO JSON RBAC
+  if (!isMaster && permissions.painel?.ver !== true) {
+    if (permissions.servicos?.ver) redirect("/obras");
+    else redirect("/pendencias");
   }
-  // --------------------------
 
-  // 1. Cálculos de Datas (Fuso Horário do Brasil)
   const agora = new Date(new Date().getTime() - 3 * 60 * 60 * 1000);
   const dataHojeStr = agora.toISOString().split('T')[0];
   const primeiroDiaMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
 
-  // 2. Busca simultânea de todos os dados cruciais (Performance máxima)
   const [todasObras, materiais, veiculos, rmasAtivos] = await Promise.all([
     prisma.serviceOrder.findMany({ include: { team: true }, orderBy: { date: 'asc' } }),
     prisma.material.findMany({ orderBy: { name: 'asc' } }),
@@ -30,19 +31,14 @@ export default async function DashboardPage() {
     prisma.rmaEquipment.findMany({ where: { status: 'EM_ANALISE' } })
   ]);
 
-  // 3. Filtrando os dados para o Dashboard
   const obrasHoje = todasObras.filter(o => o.date && o.date.toISOString().split('T')[0] === dataHojeStr);
   const obrasPendentes = todasObras.filter(o => o.status !== 'CONCLUIDO');
   const obrasConcluidasMes = todasObras.filter(o => o.status === 'CONCLUIDO' && new Date(o.updatedAt) >= primeiroDiaMes);
-  
-  // Lógica inteligente: Material com estoque igual ou menor que o mínimo configurado
   const alertasEstoque = materiais.filter(m => m.currentStock <= m.minStock);
 
   return (
     <div className="p-4 md:p-8 bg-gray-50 min-h-[calc(100vh-60px)]">
       <div className="max-w-7xl mx-auto">
-        
-        {/* CABEÇALHO DO PAINEL */}
         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">Visão Geral</h1>
@@ -55,7 +51,8 @@ export default async function DashboardPage() {
           </div>
         </header>
 
-        {/* CARDS DE MÉTRICAS RÁPIDAS (KPIs) - AGORA SÃO 5 CARDS */}
+        {/* ... Restante do seu grid de Cards e Painel Inferior exatamente igual ... */}
+        {/* Mantive cortado aqui para economizar espaço e focar na lógica, pode colar seus grids normais embaixo do </header> */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-blue-500 flex flex-col justify-between hover:shadow-md transition">
             <div className="flex justify-between items-start">
@@ -79,7 +76,6 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          {/* CARD: RMA */}
           <Link href="/materiais/rma" className="bg-red-50 p-6 rounded-2xl shadow-sm border border-red-200 border-l-4 border-l-red-600 flex flex-col justify-between hover:bg-red-100 hover:shadow-md transition cursor-pointer group">
             <div className="flex justify-between items-start">
               <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider group-hover:underline">Em Garantia / RMA</h3>

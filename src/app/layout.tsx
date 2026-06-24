@@ -15,9 +15,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const cookieStore = await cookies();
   const nomeUsuario = cookieStore.get("usuario_nome")?.value;
   const roleUsuario = cookieStore.get("usuario_role")?.value; 
+  const permString = cookieStore.get("usuario_permissions")?.value;
+  
+  let permissions: any = {};
+  try { permissions = permString ? JSON.parse(permString) : {}; } catch(e) {}
 
-  // LÓGICA DE FUGA: Define para onde o logo vai apontar dependendo de quem logou
-  const linkHome = roleUsuario === "INTERNO" ? "/" : "/obras";
+  const isMaster = nomeUsuario === 'Administrador Mestre' || permissions.master === true;
+
+  // Lógica de Fuga Dinâmica baseada em permissão real
+  let linkHome = "/pendencias"; // Default de baixo nível
+  if (isMaster || permissions.painel?.ver) linkHome = "/";
+  else if (permissions.servicos?.ver) linkHome = "/obras";
 
   return (
     <html lang="pt-BR">
@@ -31,7 +39,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </Link>
               
               <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm font-medium">
-                {/* Aqui entra o componente que muda de cor sozinho */}
                 <MenuNavegacao roleUsuario={roleUsuario} nomeUsuario={nomeUsuario} />
               </div>
 
@@ -40,7 +47,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <form action={async () => { 
                   "use server"; 
                   const c = await cookies(); 
-                  c.delete("usuario_id"); c.delete("usuario_nome"); c.delete("usuario_role");
+                  c.delete("usuario_id"); c.delete("usuario_nome"); c.delete("usuario_role"); c.delete("usuario_permissions");
                   redirect("/login"); 
                 }}>
                   <button type="submit" className="bg-red-900/50 hover:bg-red-800 text-red-200 px-3 py-1 rounded transition border border-red-700/50">Sair</button>
