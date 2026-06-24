@@ -5,44 +5,61 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql" // MUDOU PARA POSTGRESQL
+  provider  = "postgresql" 
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL") // ADICIONADO PARA SUPABASE
+  directUrl = env("DIRECT_URL") 
 }
 
+// ==========================================
+// NOVO MÓDULO: CARGOS E PERMISSÕES (RBAC)
+// ==========================================
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  color       String   @default("blue")
+  permissions Json     
+  
+  users       User[]
+}
+
+// ==========================================
+// USUÁRIOS
+// ==========================================
+
 model User {
-  id           Int           @id @default(autoincrement())
-  name         String
-  username     String?       @unique
-  password     String?
-  role         String        @default("EXTERNO")
-  active       Boolean       @default(true)
+  id            Int           @id @default(autoincrement())
+  name          String
+  username      String?       @unique
+  email         String?       @unique // Opcional para não quebrar banco antigo
+  password      String?
+  active        Boolean       @default(true)
   
-  transactions Transaction[]
-  vehicleLogs  VehicleLog[]
+  // Vínculo com o Cargo Dinâmico
+  roleId        Int?
+  role          Role?         @relation(fields: [roleId], references: [id])
   
-  // NOVA RELAÇÃO: Obras em que o técnico está alocado
+  transactions  Transaction[]
+  vehicleLogs   VehicleLog[]
   serviceOrders ServiceOrder[]
-  
-  // NOVA RELAÇÃO: Comentários que o técnico fez nos cards
   comments      Comment[]
 }
 
 // ==========================================
-// NOVO MÓDULO: CATEGORIAS DINÂMICAS
+// CATEGORIAS DINÂMICAS
 // ==========================================
 
 model Category {
   id            Int           @id @default(autoincrement())
-  name          String        @unique // Ex: "Áudio e Vídeo", "Insumos"
-  type          String        @default("EQUIPAMENTO") // "EQUIPAMENTO" ou "INSUMO"
+  name          String        @unique 
+  type          String        @default("EQUIPAMENTO") 
   
   subcategories Subcategory[]
 }
 
 model Subcategory {
   id            Int           @id @default(autoincrement())
-  name          String        // Ex: "TV com Suporte", "Cabos"
+  name          String        
   categoryId    Int
   
   category      Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -52,21 +69,14 @@ model Subcategory {
 model Material {
   id            Int           @id @default(autoincrement())
   name          String
-  
-  // A CATEGORIA ANTIGA AGORA FOI SUBSTITUÍDA PELO LINK DA SUBCATEGORIA
-  // Mantive a string "category" opcional só para não quebrar seus dados antigos agora, 
-  // mas o foco será no subcategoryId.
   category      String?       
   subcategoryId Int?
-  
-  brand         String?       // NOVO: Marca do Equipamento/Insumo
+  brand         String?       
   minStock      Int           @default(5)
   currentStock  Int           @default(0)
   
   subcategory   Subcategory?  @relation(fields: [subcategoryId], references: [id])
   transactions  Transaction[]
-  
-  // NOVA RELAÇÃO: Histórico de quais obras usaram este material
   serviceOrders ServiceOrderMaterial[]
 }
 
@@ -78,7 +88,7 @@ model Transaction {
   quantity        Int
   relatedOutbound Int?
   notes           String?   
-  clientName      String?   // NOVO: Nome do Cliente atrelado a movimentacao (opcional)
+  clientName      String?   
   assinatura      Boolean   @default(false) 
   signatureData   String?   
   createdAt       DateTime  @default(now())
@@ -95,8 +105,6 @@ model Vehicle {
   
   logs           VehicleLog[]
   maintenances   VehicleMaintenance[] 
-  
-  // NOVA RELAÇÃO: Obras em que este veículo foi utilizado
   serviceOrders  ServiceOrder[]
 }
 
@@ -130,59 +138,52 @@ model VehicleMaintenance {
 }
 
 // ==========================================
-// NOVO MÓDULO: RMA (Retorno de Mercadoria)
+// RMA
 // ==========================================
 
 model RmaEquipment {
   id              Int      @id @default(autoincrement())
-  equipmentName   String   // Nome do equipamento
-  clientName      String?  // NOVO: Nome do Cliente
-  serialNumber    String?  // Número de série (opcional)
-  problemDetected String   // Problema relatado
-  status          String   @default("EM_ANALISE") // EM_ANALISE, RESOLVIDO, DESCARTADO
-  isFromStock     Boolean  @default(false) // Veio do nosso estoque?
-  materialId      Int?     // Se veio do estoque, linka com o material
+  equipmentName   String   
+  clientName      String?  
+  serialNumber    String?  
+  problemDetected String   
+  status          String   @default("EM_ANALISE") 
+  isFromStock     Boolean  @default(false) 
+  materialId      Int?     
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
 
 // ==========================================
-// NOVO MÓDULO: OBRAS E AGENDAS (KANBAN)
+// OBRAS E AGENDAS
 // ==========================================
 
 model ServiceOrder {
   id              Int       @id @default(autoincrement())
-  title           String    // Ex: "Obra Bonadio - Home Theater"
-  description     String?   // Detalhes da obra
-  address         String?   // Endereço (vai virar link do Waze/Maps)
-  date            DateTime? // Data agendada
-  startTime       String?   // Ex: "09:00"
-  endTime         String?   // Ex: "14:00"
-  status          String    @default("AGENDADO") // AGENDADO, EM_ANDAMENTO, CONCLUIDO
-  
-  // Dados da Assinatura
-  clientSignature String?   // Assinatura do cliente em base64
-  clientName      String?   // NOVO: Nome de quem assinou
-  clientCpf       String?   // NOVO: CPF de quem assinou (Opcional)
-  
+  title           String    
+  description     String?   
+  address         String?   
+  date            DateTime? 
+  startTime       String?   
+  endTime         String?   
+  status          String    @default("AGENDADO") 
+  clientSignature String?   
+  clientName      String?   
+  clientCpf       String?   
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  // Ligações Múltiplas (Técnicos e Veículos)
-  team            User[]    // Equipe alocada para a obra
-  vehicles        Vehicle[] // Veículos utilizados na obra
-  
-  // Outras Informações do Card
-  materials       ServiceOrderMaterial[] // Materiais separados/usados
-  comments        Comment[]              // Comentários do time
-  checklist       ChecklistItem[]        // Tarefas a executar
-  attachments     Attachment[]           // Fotos, PDFs, DWG
+  team            User[]    
+  vehicles        Vehicle[] 
+  materials       ServiceOrderMaterial[] 
+  comments        Comment[]              
+  checklist       ChecklistItem[]        
+  attachments     Attachment[]           
 }
 
-// Tabela auxiliar: Registra QUANTOS materiais específicos foram para a obra
 model ServiceOrderMaterial {
   id             Int          @id @default(autoincrement())
-  quantity       Int          // Quantidade de material retirado
+  quantity       Int          
   serviceOrderId Int
   materialId     Int
   
@@ -190,7 +191,6 @@ model ServiceOrderMaterial {
   material       Material     @relation(fields: [materialId], references: [id])
 }
 
-// Comentários dentro do Card
 model Comment {
   id             Int          @id @default(autoincrement())
   content        String
@@ -202,7 +202,6 @@ model Comment {
   user           User         @relation(fields: [userId], references: [id])
 }
 
-// Checklist de Tarefas do Card
 model ChecklistItem {
   id             Int          @id @default(autoincrement())
   task           String
@@ -212,11 +211,10 @@ model ChecklistItem {
   serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
 }
 
-// Anexos (Arquivos salvos no Storage)
 model Attachment {
   id             Int          @id @default(autoincrement())
   fileName       String
-  fileUrl        String       // Link de onde o arquivo está salvo na nuvem
+  fileUrl        String       
   serviceOrderId Int
   createdAt      DateTime     @default(now())
   

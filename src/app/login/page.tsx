@@ -12,16 +12,20 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
   async function fazerLogin(formData: FormData) {
     "use server";
     
-    // O .trim() é a mágica aqui: remove espaços invisíveis colados sem querer!
-    const username = (formData.get("username") as string).trim();
+    const loginInput = (formData.get("loginInput") as string).trim();
     const password = (formData.get("password") as string).trim();
 
+    // Busca o usuário batendo o input com o Email OU com o Username
     const user = await prisma.user.findFirst({
       where: {
-        username: username,
+        OR: [
+          { email: loginInput },
+          { username: loginInput }
+        ],
         password: password,
-        active: true // Só loga se o usuário estiver ativo
-      }
+        active: true 
+      },
+      include: { role: true }
     });
 
     if (!user) {
@@ -29,12 +33,20 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
     }
 
     const cookieStore = await cookies();
-    // Salva o login por 7 dias (60 seg * 60 min * 24 h * 7 dias)
     cookieStore.set("usuario_id", String(user.id), { maxAge: 60 * 60 * 24 * 7, path: "/" });
     cookieStore.set("usuario_nome", user.name, { maxAge: 60 * 60 * 24 * 7, path: "/" });
     
-    // NOVA LINHA ADICIONADA: Salva o cargo para o sistema bloquear as abas do Técnico
-    cookieStore.set("usuario_role", user.role, { maxAge: 60 * 60 * 24 * 7, path: "/" });
+    // --- LÓGICA DE MIGRAÇÃO SEGURA (FALLBACK) ---
+    // Reconhece a sua conta antiga "admin" e força as permissões máximas para você não ficar trancado
+    const isMaster = user.role?.permissions 
+      ? (user.role.permissions as any).master 
+      : (user.username === 'admin'); 
+      
+    cookieStore.set("usuario_role", isMaster ? "INTERNO" : "TECNICO", { maxAge: 60 * 60 * 24 * 7, path: "/" });
+    
+    if (user.role?.permissions) {
+      cookieStore.set("usuario_permissions", JSON.stringify(user.role.permissions), { maxAge: 60 * 60 * 24 * 7, path: "/" });
+    }
 
     redirect("/");
   }
@@ -51,18 +63,18 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
 
         {erro && (
           <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center mb-6 border border-red-100 font-medium">
-            Usuário ou senha incorretos.
+            Usuário/Email ou senha incorretos.
           </div>
         )}
 
         <form action={fazerLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Usuário</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Email ou Usuário</label>
             <input 
               type="text" 
-              name="username" 
+              name="loginInput" 
               required 
-              placeholder="Ex: guilherme45" 
+              placeholder="seu@email.com ou seunome" 
               className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
