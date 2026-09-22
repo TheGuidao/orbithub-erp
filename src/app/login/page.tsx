@@ -15,9 +15,7 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
     const loginInput = (formData.get("loginInput") as string).trim();
     const password = (formData.get("password") as string).trim();
 
-    // ✅ MESTRE HARDCODED: O usuário admin/admin é reconhecido diretamente aqui,
-    // sem precisar estar no banco. Isso garante que o acesso nunca seja perdido
-    // mesmo após um reset total do sistema.
+    // ✅ PORTA DE SERVIÇO DO DEV (BLINDADA): Funciona sempre, independente do banco
     if (loginInput === "admin" && password === "admin") {
       const masterPermissions = {
         master: true,
@@ -32,91 +30,100 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
       };
       const cookieStore = await cookies();
       cookieStore.set("usuario_id", "0", { maxAge: 60 * 60 * 24 * 7, path: "/" });
-      cookieStore.set("usuario_nome", "Administrador", { maxAge: 60 * 60 * 24 * 7, path: "/" });
+      cookieStore.set("usuario_nome", "Administrador Mestre", { maxAge: 60 * 60 * 24 * 7, path: "/" });
       cookieStore.set("usuario_role", "INTERNO", { maxAge: 60 * 60 * 24 * 7, path: "/" });
       cookieStore.set("usuario_permissions", JSON.stringify(masterPermissions), { maxAge: 60 * 60 * 24 * 7, path: "/" });
       redirect("/");
     }
 
-    // --- AUTO-SEED: Cria o primeiro usuário real se o banco estiver vazio ---
-    const usersCount = await prisma.user.count();
-    if (usersCount === 0) {
-      const adminRole = await prisma.role.create({
-        data: {
-          name: "Gerente Geral",
-          color: "blue",
-          permissions: { master: true } 
-        }
-      });
-      const firstUser = await prisma.user.create({
-        data: {
-          name: loginInput.includes("@") ? "Administrador" : loginInput,
-          username: loginInput.includes("@") ? "gerente" : loginInput,
-          email: loginInput.includes("@") ? loginInput : null,
+    try {
+      // --- AUTO-SEED SEGURO ---
+      const usersCount = await prisma.user.count();
+      if (usersCount === 0) {
+        // Criamos o cargo com o JSON blindado
+        const adminRole = await prisma.role.create({
+          data: {
+            name: "Gerente Geral",
+            color: "blue",
+            permissions: JSON.parse(JSON.stringify({ master: true }))
+          }
+        });
+        
+        const firstUser = await prisma.user.create({
+          data: {
+            name: loginInput.includes("@") ? "Administrador" : loginInput,
+            username: loginInput.includes("@") ? "gerente" : loginInput,
+            email: loginInput.includes("@") ? loginInput : null,
+            password: password,
+            roleId: adminRole.id
+          },
+          include: { role: true }
+        });
+        
+        const cookieStore = await cookies();
+        cookieStore.set("usuario_id", String(firstUser.id), { maxAge: 60 * 60 * 24 * 7, path: "/" });
+        cookieStore.set("usuario_nome", firstUser.name, { maxAge: 60 * 60 * 24 * 7, path: "/" });
+        cookieStore.set("usuario_role", "INTERNO", { maxAge: 60 * 60 * 24 * 7, path: "/" });
+        
+        const fullPermissions = { master: true, painel: {ver:true}, servicos: {ver:true, criar:true, excluir:true}, catalogo: {ver:true, criar:true, excluir:true}, movimentacoes: {ver:true, lancar:true}, frota: {ver:true}, oficina: {ver:true}, garagem: {ver:true}, equipe: {ver:true} };
+        cookieStore.set("usuario_permissions", JSON.stringify(fullPermissions), { maxAge: 60 * 60 * 24 * 7, path: "/" });
+
+        redirect("/");
+      }
+
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: loginInput },
+            { username: loginInput }
+          ],
           password: password,
-          roleId: adminRole.id
+          active: true 
         },
         include: { role: true }
       });
-      
+
+      if (!user) {
+        redirect("/login?error=1");
+      }
+
       const cookieStore = await cookies();
-      cookieStore.set("usuario_id", String(firstUser.id), { maxAge: 60 * 60 * 24 * 7, path: "/" });
-      cookieStore.set("usuario_nome", firstUser.name, { maxAge: 60 * 60 * 24 * 7, path: "/" });
-      cookieStore.set("usuario_role", "INTERNO", { maxAge: 60 * 60 * 24 * 7, path: "/" });
+      cookieStore.set("usuario_id", String(user.id), { maxAge: 60 * 60 * 24 * 7, path: "/" });
+      cookieStore.set("usuario_nome", user.name, { maxAge: 60 * 60 * 24 * 7, path: "/" });
       
-      const fullPermissions = { master: true, painel: {ver:true}, servicos: {ver:true, criar:true, excluir:true}, catalogo: {ver:true, criar:true, excluir:true}, movimentacoes: {ver:true, lancar:true}, frota: {ver:true}, oficina: {ver:true}, garagem: {ver:true}, equipe: {ver:true} };
-      cookieStore.set("usuario_permissions", JSON.stringify(fullPermissions), { maxAge: 60 * 60 * 24 * 7, path: "/" });
+      const isMaster = (user.role?.permissions as any)?.master === true;
+        
+      cookieStore.set("usuario_role", isMaster ? "INTERNO" : "TECNICO", { maxAge: 60 * 60 * 24 * 7, path: "/" });
+      
+      if (isMaster) {
+        const masterPermissions = {
+          master: true,
+          painel: { ver: true },
+          servicos: { ver: true, criar: true, excluir: true },
+          catalogo: { ver: true, criar: true, excluir: true },
+          movimentacoes: { ver: true, lancar: true },
+          frota: { ver: true },
+          oficina: { ver: true },
+          garagem: { ver: true },
+          equipe: { ver: true }
+        };
+        cookieStore.set("usuario_permissions", JSON.stringify(masterPermissions), { maxAge: 60 * 60 * 24 * 7, path: "/" });
+      } else if (user.role?.permissions) {
+        cookieStore.set("usuario_permissions", JSON.stringify(user.role.permissions), { maxAge: 60 * 60 * 24 * 7, path: "/" });
+      } else {
+        cookieStore.set("usuario_permissions", JSON.stringify({}), { maxAge: 60 * 60 * 24 * 7, path: "/" });
+      }
 
       redirect("/");
-    }
-    // ----------------------------------------------------------------------
-
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: loginInput },
-          { username: loginInput }
-        ],
-        password: password,
-        active: true 
-      },
-      include: { role: true }
-    });
-
-    if (!user) {
+    } catch (error: any) {
+      // Se houver qualquer redirect do Next.js, deixamos passar (o redirect lança uma exceção controlada no Next)
+      if (error?.message?.includes("NEXT_REDIRECT")) {
+        throw error;
+      }
+      // Se for outro erro de banco ou de execução, redireciona com erro limpo para não estourar tela 500 genérica
+      console.error("Erro no login:", error);
       redirect("/login?error=1");
     }
-
-    const cookieStore = await cookies();
-    cookieStore.set("usuario_id", String(user.id), { maxAge: 60 * 60 * 24 * 7, path: "/" });
-    cookieStore.set("usuario_nome", user.name, { maxAge: 60 * 60 * 24 * 7, path: "/" });
-    
-    // ✅ CORRIGIDO: isMaster agora usa APENAS permissions.master do cargo,
-    // não depende mais do nome do usuário.
-    const isMaster = (user.role?.permissions as any)?.master === true;
-      
-    cookieStore.set("usuario_role", isMaster ? "INTERNO" : "TECNICO", { maxAge: 60 * 60 * 24 * 7, path: "/" });
-    
-    if (isMaster) {
-      const masterPermissions = {
-        master: true,
-        painel: { ver: true },
-        servicos: { ver: true, criar: true, excluir: true },
-        catalogo: { ver: true, criar: true, excluir: true },
-        movimentacoes: { ver: true, lancar: true },
-        frota: { ver: true },
-        oficina: { ver: true },
-        garagem: { ver: true },
-        equipe: { ver: true }
-      };
-      cookieStore.set("usuario_permissions", JSON.stringify(masterPermissions), { maxAge: 60 * 60 * 24 * 7, path: "/" });
-    } else if (user.role?.permissions) {
-      cookieStore.set("usuario_permissions", JSON.stringify(user.role.permissions), { maxAge: 60 * 60 * 24 * 7, path: "/" });
-    } else {
-      cookieStore.set("usuario_permissions", JSON.stringify({}), { maxAge: 60 * 60 * 24 * 7, path: "/" });
-    }
-
-    redirect("/");
   }
 
   return (
